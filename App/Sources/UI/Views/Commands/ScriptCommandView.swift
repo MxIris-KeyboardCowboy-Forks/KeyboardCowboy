@@ -12,129 +12,313 @@ struct ScriptCommandView: View {
     case edit
     case commandAction(CommandContainerAction)
   }
-  @EnvironmentObject var selection: SelectionManager<CommandViewModel>
-  @EnvironmentObject var openPanel: OpenPanelController
-  @State private var text: String
-  @State private var metaData: CommandViewModel.MetaData
-  @State private var model: CommandViewModel.Kind.ScriptModel
+  private let metaData: CommandViewModel.MetaData
+  @Binding private var model: CommandViewModel.Kind.ScriptModel
   private let iconSize: CGSize
   private let onAction: (Action) -> Void
+  private let onSubmit: () -> Void
 
   init(_ metaData: CommandViewModel.MetaData,
-       model: CommandViewModel.Kind.ScriptModel,
+       model: Binding<CommandViewModel.Kind.ScriptModel>,
        iconSize: CGSize,
+       onSubmit: @escaping () -> Void,
        onAction: @escaping (Action) -> Void) {
-    _metaData = .init(initialValue: metaData)
-    _model = .init(initialValue: model)
-
+    _model = model
+    self.metaData = metaData
     self.iconSize = iconSize
-    switch model.source {
-    case .inline(let source):
-      _text = .init(initialValue: source)
-    case .path(let source):
-      _text = .init(initialValue: source)
-    }
-
+    self.onSubmit = onSubmit
     self.onAction = onAction
   }
 
   var body: some View {
-    CommandContainerView($metaData,
-                         placeholder: model.placeholder,
-                         icon: {
-      command in
-      ZStack {
-        IconView(
-          icon: .init(
-            bundleIdentifier: "/System/Applications/Utilities/Script Editor.app",
-            path: "/System/Applications/Utilities/Script Editor.app"
-          ),
-          size: iconSize
-        )
-      }
-    },
-                         content: { metaData in
-      VStack(alignment: .leading) {
-        switch model.source {
-        case .inline:
-          ZenTextEditor(color: ZenColorPublisher.shared.color,
-                        text: $text,
-                        placeholder: "Script goes here…",
-                        font: Font.system(.body, design: .monospaced))
-            .onChange(of: text, perform: { newValue in
-              onAction(.updateSource(.init(id: model.id, source: .inline(newValue), 
-                                           scriptExtension: model.scriptExtension)))
-            })
-            .padding([.trailing, .bottom], 8)
+    CommandContainerView(
+      metaData,
+      placeholder: model.placeholder,
+      icon: { _ in ScriptIconView(size: iconSize.width) },
+      content: { _ in
+        ScriptCommandContentView(model, meta: metaData, onSubmit: onSubmit, onAction: onAction)
+          .roundedContainer(padding: 4, margin: 0)
+      },
+      subContent: { _ in
+        ScriptCommandSubContentView(model: model, metaData: metaData, onAction: onAction)
+      },
+      onAction: { onAction(.commandAction($0)) })
+  }
+}
 
-          HStack(spacing: 4) {
-            Text("Environment:")
-            Group {
-              Button(action: { text.append(" $DIRECTORY") },
-                     label: { Text("$DIRECTORY") })
-              .help("$DIRECTORY: The current directory")
-              Button(action: { text.append(" $FILE") },
-                     label: { Text("$FILE") })
-              .help("$FILE: The current file")
-              Button(action: { text.append(" $FILENAME") },
-                     label: { Text("$FILENAME") })
-              .help("$FILENAME: The current filename")
-              Button(action: { text.append(" $EXTENSION") },
-                     label: { Text("$EXTENSION") })
-              .help("$EXTENSION: The current file extension")
-            }
-            .buttonStyle(.zen(ZenStyleConfiguration(color: .black)))
-          }
-          .allowsTightening(true)
-          .lineLimit(1)
-          .font(.caption2)
-          .padding(.leading, 4)
-        case .path:
+struct ScriptCommandContentView: View {
+  @EnvironmentObject var openPanel: OpenPanelController
+  private let text: String
+  private let model: CommandViewModel.Kind.ScriptModel
+  private let onAction: (ScriptCommandView.Action) -> Void
+  private let onSubmit: () -> Void
+
+  init(_ model: CommandViewModel.Kind.ScriptModel,
+       meta: CommandViewModel.MetaData,
+       onSubmit: @escaping () -> Void,
+       onAction: @escaping (ScriptCommandView.Action) -> Void) {
+    self.model = model
+    self.onAction = onAction
+    self.onSubmit = onSubmit
+    self.text = switch model.source {
+    case .inline(let source): source
+    case .path(let source): source
+    }
+  }
+
+  var body: some View {
+    ZStack {
+      ScriptCommandInlineView(text: text,
+                              variableName: model.variableName,
+                              execution: model.execution,
+                              onVariableNameChange: { variableName in
+        onAction(.updateSource(.init(id: model.id, source: model.source,
+                                     scriptExtension: model.scriptExtension,
+                                     variableName: variableName,
+                                     execution: model.execution)))
+      }, onScriptChange: { newValue in
+        onAction(.updateSource(.init(id: model.id, source: .inline(newValue),
+                                     scriptExtension: model.scriptExtension,
+                                     variableName: model.variableName,
+                                     execution: model.execution)))
+      }, onSubmit: onSubmit)
+      .opacity(model.source.isInline ? 1 : 0)
+      .frame(height: model.source.isInline ? nil : 0)
+
+      ScriptCommandPathView(
+        text, variableName: model.variableName,
+        execution: model.execution,
+        onVariableNameChange: { variableName in
+          onAction(.updateSource(.init(id: model.id, source: model.source,
+                                       scriptExtension: model.scriptExtension,
+                                       variableName: variableName,
+                                       execution: model.execution)))
+        },
+        onBrowse: {
+          openPanel.perform(.selectFile(type: model.scriptExtension.rawValue, handler: { newPath in
+            onAction(.updateSource(.init(id: model.id, source: .path(newPath),
+                                         scriptExtension: model.scriptExtension,
+                                         variableName: model.variableName,
+                                         execution: model.execution)))
+          }))
+        }, onUpdate: { newPath in
+          onAction(.updateSource(.init(id: model.id, source: .path(newPath),
+                                       scriptExtension: model.scriptExtension,
+                                       variableName: model.variableName,
+                                       execution: model.execution)))
+        })
+      .opacity(model.source.isInline ? 0 : 1)
+      .frame(height: model.source.isInline ? 0 : nil)
+    }
+  }
+}
+
+private struct ScriptCommandInlineView: View {
+  @State private var text: String
+  @State private var variableName: String
+  private let execution: Workflow.Execution
+  private let onVariableNameChange: (String) -> Void
+  private let onScriptChange: (String) -> Void
+  private let onSubmit: () -> Void
+
+  init(text: String,
+       variableName: String,
+       execution: Workflow.Execution,
+       onVariableNameChange: @escaping (String) -> Void,
+       onScriptChange: @escaping (String) -> Void,
+       onSubmit: @escaping () -> Void) {
+    self.text = text
+    self.variableName = variableName
+    self.execution = execution
+    self.onVariableNameChange = onVariableNameChange
+    self.onScriptChange = onScriptChange
+    self.onSubmit = onSubmit
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 4) {
+      ZenTextEditor(color: ZenColorPublisher.shared.color,
+                    text: $text,
+                    placeholder: "Script goes here…",
+                    font: Font.system(.body, design: .monospaced), onCommandReturnKey: onSubmit)
+      .onChange(of: text, perform: onScriptChange)
+
+      ZenDivider()
+      HStack(spacing: 8) {
+        EnvironmentIconView(size: 22)
+        ZenDivider(.vertical)
+          .fixedSize()
+        ScrollView(.horizontal) {
           HStack {
-            TextField("Path", text: $text)
-              .textFieldStyle(
-                .zen(
-                  .init(
-                    backgroundColor: Color.clear,
-                    font: .callout,
-                    padding: .init(horizontal: .medium, vertical: .medium),
-                    unfocusedOpacity: 0.0
-                  )
-                )
-              )
-              .onChange(of: text) { newPath in
-                self.text = newPath
-                onAction(.updateSource(.init(id: model.id, source: .path(newPath), scriptExtension: model.scriptExtension)))
-              }
-            Button("Browse", action: {
-              openPanel.perform(.selectFile(type: model.scriptExtension.rawValue, handler: { newPath in
-                self.text = newPath
-                onAction(.updateSource(.init(id: model.id, source: .path(newPath), scriptExtension: model.scriptExtension)))
-              }))
-            })
-            .buttonStyle(.zen(ZenStyleConfiguration(color: .systemBlue, grayscaleEffect: .constant(true))))
-            .font(.caption)
+            ForEach(UserSpace.EnvironmentKey.allCases, id: \.rawValue) { env in
+              Button(action: { text.append(env.asTextVariable) },
+                     label: { Text(env.asTextVariable) })
+              .help("\(env.asTextVariable): \(env.help)")
+            }
+            .padding(.vertical, 4)
           }
+          .padding(.horizontal, 4)
         }
+        .roundedContainer(padding:0, margin: 0)
       }
-      .roundedContainer(padding: 4, margin: 0)
-    },
-                         subContent: { _ in
+      .buttonStyle(.zen(ZenStyleConfiguration(color: .systemGreen)))
+      .allowsTightening(true)
+      .lineLimit(1)
+      .font(.caption2)
+      .padding(.leading, 4)
+
+      ScriptCommandAssignToVariableView(variableName: variableName,
+                                        execution: execution,
+                                        onVariableNameChange: onVariableNameChange)
+    }
+  }
+}
+
+private struct ScriptCommandPathView: View {
+  @State private var text: String
+  @State private var variableName: String
+  private let execution: Workflow.Execution
+  private let onVariableNameChange: (String) -> Void
+  private let onBrowse: () -> Void
+  private let onUpdate: (String) -> Void
+
+  init(_ text: String,
+       variableName: String,
+       execution: Workflow.Execution,
+       onVariableNameChange: @escaping (String) -> Void,
+       onBrowse: @escaping () -> Void,
+       onUpdate: @escaping (String) -> Void) {
+    _text = .init(initialValue: text)
+    self.execution = execution
+    self.onBrowse = onBrowse
+    self.onUpdate = onUpdate
+    self.onVariableNameChange = onVariableNameChange
+    self.variableName = variableName
+  }
+
+  var body: some View {
+    VStack(spacing: 0) {
       HStack {
-        switch model.source {
-        case .path(let source):
-          Button("Open", action: { onAction(.open(path: source)) })
-            .buttonStyle(.zen(ZenStyleConfiguration(color: .systemCyan, grayscaleEffect: .constant(true))))
-          Button("Reveal", action: { onAction(.reveal(path: source)) })
-            .buttonStyle(.zen(ZenStyleConfiguration(color: .systemBlue, grayscaleEffect: .constant(true))))
-        case .inline:
-          EmptyView()
+        TextField("Path", text: $text)
+          .textFieldStyle(
+            .zen(
+              .init(
+                backgroundColor: Color.clear,
+                font: .callout,
+                padding: .init(horizontal: .medium, vertical: .medium),
+                unfocusedOpacity: 0.0
+              )
+            )
+          )
+          .onChange(of: text) { newPath in
+            self.text = newPath
+            onUpdate(newPath)
+          }
+        Button("Browse", action: onBrowse)
+          .buttonStyle(.zen(ZenStyleConfiguration(color: .systemBlue, grayscaleEffect: .constant(true))))
+          .font(.caption)
+      }
+      ScriptCommandAssignToVariableView(
+        variableName: variableName,
+        execution: execution,
+        onVariableNameChange: onVariableNameChange
+      )
+      .opacity(execution == .serial ? 1 : 0)
+      .frame(maxHeight: execution == .serial ? nil : 0)
+    }
+  }
+}
+
+private struct ScriptCommandSubContentView: View {
+  private let model: CommandViewModel.Kind.ScriptModel
+  private let metaData: CommandViewModel.MetaData
+  private let onAction: (ScriptCommandView.Action) -> Void
+
+  init(model: CommandViewModel.Kind.ScriptModel,
+       metaData: CommandViewModel.MetaData,
+       onAction: @escaping (ScriptCommandView.Action) -> Void) {
+    self.model = model
+    self.metaData = metaData
+    self.onAction = onAction
+  }
+
+  var body: some View {
+    HStack {
+      Menu {
+        Button(action: { onAction(.commandAction(.toggleNotify(nil))) }, label: { Text("None") })
+        ForEach(Command.Notification.allCases) { notification in
+          Button(action: { onAction(.commandAction(.toggleNotify(notification))) },
+                 label: { Text(notification.displayValue) })
+        }
+      } label: {
+        switch metaData.notification {
+        case .bezel:
+          Text("Bezel")
+            .font(.caption)
+        case .commandPanel:
+          Text("Command Panel")
+            .font(.caption)
+        case .none:
+          Text("None")
+            .font(.caption)
         }
       }
-      .font(.caption)
-    },
-                         onAction: { onAction(.commandAction($0)) })
-    .enableInjection()
+      .menuStyle(.zen(.init(color: .systemGray, padding: .large)))
+      .fixedSize()
+      switch model.source {
+      case .path(let source):
+        Spacer()
+        Button("Open", action: { onAction(.open(path: source)) })
+          .buttonStyle(.zen(ZenStyleConfiguration(color: .systemCyan, grayscaleEffect: .constant(true))))
+        Button("Reveal", action: { onAction(.reveal(path: source)) })
+          .buttonStyle(.zen(ZenStyleConfiguration(color: .systemBlue, grayscaleEffect: .constant(true))))
+      case .inline:
+        EmptyView()
+      }
+    }
+    .font(.caption)
+  }
+}
+
+private struct ScriptCommandAssignToVariableView: View {
+  @State var variableName: String
+  private let execution: Workflow.Execution
+  private let onVariableNameChange: (String) -> Void
+
+  init(variableName: String, execution: Workflow.Execution, onVariableNameChange: @escaping (String) -> Void) {
+    self.variableName = variableName
+    self.execution = execution
+    self.onVariableNameChange = onVariableNameChange
+  }
+
+  var body: some View {
+    Group {
+      ZenDivider()
+      HStack(spacing: 8) {
+        MagicVarsIconView(size: 22)
+        ZenDivider(.vertical)
+          .fixedSize()
+        TextField("Assign output to variable", text: $variableName)
+          .textFieldStyle(.zen(.init(font: .caption)))
+          .onChange(of: variableName) { newValue in
+            onVariableNameChange(newValue)
+          }
+          .roundedContainer(padding:0, margin: 0)
+      }
+      .font(.caption2)
+      .padding(.leading, 4)
+    }
+    .opacity(execution == .serial ? 1 : 0)
+    .frame(maxHeight: execution == .serial ? nil : 0)
+  }
+}
+
+fileprivate extension ScriptCommand.Source {
+  var isInline: Bool {
+    switch self {
+    case .path: false
+    case .inline: true
+    }
   }
 }
 
@@ -144,11 +328,14 @@ struct ScriptCommandView_Previews: PreviewProvider {
 
   static var previews: some View {
     Group {
-      ScriptCommandView(inlineCommand.model.meta, model: inlineCommand.kind, iconSize: .init(width: 24, height: 24)) { _ in }
-        .frame(maxHeight: 120)
+      ScriptCommandView(inlineCommand.model.meta,
+                        model: .constant(inlineCommand.kind),
+                        iconSize: .init(width: 24, height: 24),
+                        onSubmit: { },
+                        onAction: { _ in })
         .previewDisplayName("Inline")
-      ScriptCommandView(pathCommand.model.meta, model: pathCommand.kind, iconSize: .init(width: 24, height: 24)) { _ in }
-        .frame(maxHeight: 120)
+      ScriptCommandView(pathCommand.model.meta, model: .constant(pathCommand.kind), iconSize: .init(width: 24, height: 24),
+                        onSubmit: {}, onAction: { _ in })
         .previewDisplayName("Path")
     }
     .designTime()

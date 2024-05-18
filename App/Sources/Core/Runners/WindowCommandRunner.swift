@@ -2,6 +2,7 @@ import AXEssibility
 import Cocoa
 import Combine
 import Foundation
+import Intercom
 import MachPort
 
 enum WindowCommandRunnerError: Error {
@@ -25,6 +26,7 @@ final class WindowCommandRunner {
   }
 
   private lazy var systemElement = SystemAccessibilityElement()
+  private lazy var intercom = Intercom(MouseDefIntercomApp.self)
 
   nonisolated init() {}
 
@@ -117,6 +119,11 @@ final class WindowCommandRunner {
           mainDisplay: mainDisplay
         )
       case .fullscreen(let padding):
+        if intercom.isRunning() {
+          intercom.send(.snapToFullscreen, userInfo: ["padding": padding])
+          return
+        }
+
         let resolvedFrame = WindowRunnerFullscreen.calculateRect(
           originFrame,
           padding: padding,
@@ -196,6 +203,8 @@ final class WindowCommandRunner {
         duration: command.animationDuration,
         onUpdate: { activeWindow.frame = $0 }
       )
+
+      intercom.send(.autoHideDockIfNeeded)
     }
   }
 
@@ -234,7 +243,7 @@ final class WindowCommandRunner {
     var focusedElement: AnyFocusedAccessibilityElement
     let focusedWindow: WindowAccessibilityElement?
     do {
-      focusedElement = try systemElement.focusedUIElement()
+      focusedElement = try systemElement.focusedUIElement(0.00275)
       if let focusedApp = focusedElement.app {
         focusedWindow = try focusedApp.focusedWindow()
       } else {

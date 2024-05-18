@@ -19,24 +19,56 @@ struct NewCommandBuiltInView: View {
     VStack(alignment: .leading) {
       ZenLabel("Built-In Commands")
         .frame(maxWidth: .infinity, alignment: .leading)
-
       HStack {
-        Menu(content: {
-          Button(action: { kindSelection = .userMode(userModeSelection, .toggle) }, label: { Text("Toggle") })
-          Button(action: { kindSelection = .userMode(userModeSelection, .enable) }, label: { Text("Enable") })
-          Button(action: { kindSelection = .userMode(userModeSelection, .disable) }, label: { Text("Disable") })
-        }, label: {
-          Text(kindSelection.displayValue)
-        })
+        switch kindSelection {
+          case .macro(let macroAction):
+            switch macroAction.kind {
+              case .record:
+                MacroIconView(.record, size: 24)
+              case .remove:
+                MacroIconView(.remove, size: 24)
+            }
+          case .userMode:
+            let path = Bundle.main.bundleURL.path
+            IconView(icon: .init(bundleIdentifier: path, path: path), size: CGSize(width: 24, height: 24))
+          case .commandLine:
+            CommandLineIconView(size: 24)
+        }
 
-        Menu(content: {
-          ForEach(publisher.data.userModes) { userMode in
-            Button(action: { userModeSelection = userMode },
-                   label: { Text(userMode.name) })
+        VStack {
+
+          Menu {
+            Button(action: { kindSelection = .userMode(.init(id: UUID().uuidString, name: "", isEnabled: true), .toggle) },
+                   label: { Text("User Mode") })
+            Button(action: { kindSelection = .commandLine(.argument(contents: "")) },
+                   label: { Text("Open Command Line") })
+            Button(action: { kindSelection = .macro(.record) },
+                   label: { Text("Record Macros") })
+            Button(action: { kindSelection = .macro(.remove) },
+                   label: { Text("Remove Macros") })
+          } label: {
+            switch kindSelection {
+              case .macro(let action):
+                switch action.kind {
+                  case .record:
+                    Text("Record Macro")
+                  case .remove:
+                    Text("Remove Macro")
+                }
+              case .userMode:
+                Text("User Mode")
+              case .commandLine:
+                Text("Open Command Line")
+            }
           }
-        }, label: {
-          Text(publisher.data.userModes.first(where: { $0.id == userModeSelection.id })?.name ?? "Pick a User Mode")
-        })
+        }
+      }
+
+      switch kindSelection {
+        case .macro, .commandLine:
+          EmptyView()
+        case .userMode:
+          userMode()
       }
     }
     .onChange(of: kindSelection, perform: { newValue in
@@ -51,20 +83,62 @@ struct NewCommandBuiltInView: View {
     }
     .onAppear {
       validation = .needsValidation
-      payload = .builtIn(builtIn: .init(kind: kindSelection, notification: false))
+      payload = .builtIn(builtIn: .init(kind: kindSelection, notification: nil))
     }
     .menuStyle(.regular)
   }
 
+  func userMode() -> some View {
+    HStack {
+      UserModeIconView(size: 24)
+
+      Menu(content: {
+        Button(action: { kindSelection = .userMode(userModeSelection, .toggle) }, label: {
+          Image(systemName: "togglepower")
+          Text("Toggle")
+        })
+        Button(action: { kindSelection = .userMode(userModeSelection, .enable) }, label: {
+          Image(systemName: "lightswitch.on")
+          Text("Enable")
+        })
+        Button(action: { kindSelection = .userMode(userModeSelection, .disable) }, label: {
+          Image(systemName: "lightswitch.off")
+          Text("Disable")
+        })
+      }, label: {
+        Text(kindSelection.displayValue)
+      })
+
+      Menu(content: {
+        ForEach(publisher.data.userModes) { userMode in
+          Button(action: { userModeSelection = userMode },
+                 label: { Text(userMode.name) })
+        }
+      }, label: {
+        Text(publisher.data.userModes.first(where: { $0.id == userModeSelection.id })?.name ?? "Pick a User Mode")
+      })
+    }
+  }
+
   @discardableResult
   private func updateAndValidatePayload() -> NewCommandValidation {
-    let newKind: BuiltInCommand.Kind = switch kindSelection {
-      case .userMode(_, let action): .userMode(userModeSelection, action)
+    let validation: Bool
+    let newKind: BuiltInCommand.Kind
+    switch kindSelection {
+      case .macro(let action):
+        validation = true
+        newKind = .macro(action)
+      case .userMode(_, let action):
+        validation = !userModeSelection.name.isEmpty
+        newKind = .userMode(userModeSelection, action)
+      case .commandLine(let action):
+        validation = true
+        newKind = .commandLine(action)
     }
 
-    payload = .builtIn(builtIn: .init(kind: newKind, notification: false))
+    payload = .builtIn(builtIn: .init(kind: newKind, notification: nil))
 
-    return !userModeSelection.name.isEmpty ? .valid : .invalid(reason: "Please select a User Mode.")
+    return validation ? .valid : .invalid(reason: "Please select a User Mode.")
   }
 }
 

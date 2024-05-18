@@ -11,13 +11,13 @@ final class SystemCommandRunner: @unchecked Sendable {
   var machPort: MachPortEventController?
 
   private let applicationStore: ApplicationStore
-  private var flagsChangedSubscription: AnyCancellable?
   private let workspace: WorkspaceProviding
 
+  private var flagsChangedSubscription: AnyCancellable?
   private var frontMostIndex: Int = 0
   private var visibleMostIndex: Int = 0
 
-  init(_ applicationStore: ApplicationStore, workspace: WorkspaceProviding = NSWorkspace.shared) {
+  init(_ applicationStore: ApplicationStore = .shared, workspace: WorkspaceProviding = NSWorkspace.shared) {
     self.applicationStore = applicationStore
     self.workspace = workspace
   }
@@ -35,14 +35,15 @@ final class SystemCommandRunner: @unchecked Sendable {
       }
   }
 
-  func run(_ command: SystemCommand, applicationRunner: ApplicationCommandRunner, 
-           snapshot: UserSpace.Snapshot) async throws {
-    try await MainActor.run {
+  func run(_ command: SystemCommand, applicationRunner: ApplicationCommandRunner,
+           checkCancellation: Bool, snapshot: UserSpace.Snapshot) async throws {
+    Task { @MainActor in
       switch command.kind {
       case .activateLastApplication:
         Task {
           let previousApplication = snapshot.previousApplication
-          try await applicationRunner.run(.init(application: previousApplication.asApplication()))
+          try await applicationRunner.run(.init(application: previousApplication.asApplication()),
+                                          checkCancellation: checkCancellation)
         }
       case .moveFocusToNextWindow, .moveFocusToPreviousWindow,
            .moveFocusToNextWindowGlobal, .moveFocusToPreviousWindowGlobal:
@@ -68,8 +69,15 @@ final class SystemCommandRunner: @unchecked Sendable {
         Dock.run(.applicationWindows)
       case .missionControl:
         Dock.run(.missionControl)
+      case .moveFocusToNextWindowUpwards:
+        try await SystemWindowRelativeFocus.run(.up, snapshot: snapshot)
+      case .moveFocusToNextWindowDownwards:
+        try await SystemWindowRelativeFocus.run(.down, snapshot: snapshot)
+      case .moveFocusToNextWindowOnLeft:
+        try await SystemWindowRelativeFocus.run(.left, snapshot: snapshot)
+      case .moveFocusToNextWindowOnRight:
+        try await SystemWindowRelativeFocus.run(.right, snapshot: snapshot)
       }
     }
   }
 }
-

@@ -10,6 +10,7 @@ final class ActivateApplicationPlugin {
 
   private let userSpace: UserSpace
 
+  @MainActor
   init(userSpace: UserSpace = .shared) {
     self.userSpace = userSpace
   }
@@ -26,9 +27,9 @@ final class ActivateApplicationPlugin {
   /// - Throws: If the method cannot match a running application then
   ///           a `.failedToFindRunningApplication` will be thrown.
   ///           If `.activate` should fail, then another error will be thrown: `.failedToActivate`
-  func execute(_ command: ApplicationCommand) async throws {
+  func execute(_ command: ApplicationCommand, checkCancellation: Bool) async throws {
     guard
-      let runningApplication = UserSpace.shared
+      let runningApplication = userSpace
         .runningApplications
         .first(where:
                 { $0.bundleIdentifier.lowercased() == command.application.bundleIdentifier.lowercased() }
@@ -42,7 +43,7 @@ final class ActivateApplicationPlugin {
       options.insert(.activateAllWindows)
     }
 
-    try Task.checkCancellation()
+    if checkCancellation { try Task.checkCancellation() }
 
     if !runningApplication.ref.activate(options: options) {
       throw ActivateApplicationPlugin.failedToActivate

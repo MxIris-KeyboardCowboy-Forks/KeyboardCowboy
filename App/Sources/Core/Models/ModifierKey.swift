@@ -10,9 +10,10 @@ public enum ModifierKey: String, Codable, Hashable, Identifiable, Sendable {
   case control = "^"
   case option = "~"
   case command = "@"
+  case capsLock = "⇪"
 
   public static var allCases: [ModifierKey] {
-    return [.function, .shift, .control, .option, .command]
+    return [.function, .shift, .control, .option, .command, .capsLock]
   }
 
   public var symbol: String {
@@ -22,6 +23,7 @@ public enum ModifierKey: String, Codable, Hashable, Identifiable, Sendable {
     case .control: ""
     case .option: ""
     case .command: ""
+    case .capsLock: ""
     }
   }
 
@@ -31,6 +33,7 @@ public enum ModifierKey: String, Codable, Hashable, Identifiable, Sendable {
     case .control:          "control"
     case .option:           "option"
     case .command:          "command"
+    case .capsLock:         ""
     }
   }
 
@@ -41,6 +44,7 @@ public enum ModifierKey: String, Codable, Hashable, Identifiable, Sendable {
     case .control:  "⌃"
     case .option:   "⌥"
     case .command:  "⌘"
+    case .capsLock: "⇪"
     }
   }
 
@@ -51,6 +55,7 @@ public enum ModifierKey: String, Codable, Hashable, Identifiable, Sendable {
     case .control: "⌃"
     case .option:  "⌥"
     case .command: "⌘"
+    case .capsLock: "⇪"
     }
   }
 
@@ -61,6 +66,7 @@ public enum ModifierKey: String, Codable, Hashable, Identifiable, Sendable {
     case .option:   .maskAlternate
     case .command:  .maskCommand
     case .function: .maskSecondaryFn
+    case .capsLock: .maskAlphaShift
     }
   }
 }

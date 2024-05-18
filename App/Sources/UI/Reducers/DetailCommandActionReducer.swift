@@ -1,5 +1,6 @@
 import Foundation
 import Cocoa
+import MachPort
 
 final class DetailCommandActionReducer {
   static func reduce(_ action: CommandView.Action,
@@ -24,7 +25,15 @@ final class DetailCommandActionReducer {
       let runCommand = command
       Task {
         do {
-          try await commandRunner.run(runCommand, snapshot: UserSpace.shared.snapshot(resolveUserEnvironment: false))
+          guard let machPortEvent = MachPortEvent.empty() else { return }
+          var runtimeDictionary = [String: String]()
+          try await commandRunner.run(runCommand,
+                                      snapshot: UserSpace.shared.snapshot(resolveUserEnvironment: false),
+                                      shortcut: .empty(),
+                                      machPortEvent: machPortEvent,
+                                      checkCancellation: false,
+                                      repeatingEvent: false,
+                                      runtimeDictionary: &runtimeDictionary)
         } catch let error as KeyboardCommandRunnerError {
           let alert = await NSAlert(error: error)
           await alert.runModal()
@@ -61,11 +70,11 @@ final class DetailCommandActionReducer {
           command.name = newName
           workflow.updateOrAddCommand(command)
         case .changeApplicationAction(let action):
-          switch action {
-          case .open:
-            applicationCommand.action = .open
-          case .close:
-            applicationCommand.action = .close
+          applicationCommand.action = switch action { 
+          case .open:   .open
+          case .close:  .close
+          case .hide:   .hide
+          case .unhide: .unhide
           }
           command = .application(applicationCommand)
           workflow.updateOrAddCommand(command)
@@ -93,7 +102,7 @@ final class DetailCommandActionReducer {
       case .keyboard(let action, _):
         switch action {
         case .updateKeyboardShortcuts(let keyboardShortcuts):
-          command = .keyboard(.init(id: command.id, keyboardShortcuts: keyboardShortcuts, notification: command.notification))
+          command = .keyboard(.init(id: command.id, name: "", keyboardShortcuts: keyboardShortcuts, notification: command.notification))
           workflow.updateOrAddCommand(command)
         case .updateName(let newName):
           command.name = newName
@@ -101,6 +110,8 @@ final class DetailCommandActionReducer {
         case .commandAction(let action):
           DetailCommandContainerActionReducer.reduce(action, command: &command, workflow: &workflow)
           workflow.updateOrAddCommand(command)
+        case .editCommand:
+          break // NOOP
         }
       case .mouse(let action, _):
         switch action {
@@ -146,25 +157,39 @@ final class DetailCommandActionReducer {
         switch action {
         case .updateSource(let model):
           let kind: ScriptCommand.Kind
-          switch model.scriptExtension {
-          case .appleScript:
-            kind = .appleScript
-          case .shellScript:
-            kind = .shellScript
+          kind = switch model.scriptExtension {
+          case .appleScript: .appleScript
+          case .shellScript: .shellScript
           }
+
+          let variableName: String?
+          if !model.variableName.isEmpty {
+            variableName = model.variableName
+          } else {
+            variableName = nil
+          }
+
           command = .script(.init(id: command.id,
                                   name: command.name, kind: kind, source: model.source,
-                                  notification: command.meta.notification))
+                                  notification: command.meta.notification,
+                                  variableName: variableName))
           workflow.updateOrAddCommand(command)
         case .updateName(let newName):
           command.name = newName
           workflow.updateOrAddCommand(command)
         case .open(let source):
           Task {
+            guard let machPortEvent = MachPortEvent.empty() else { return }
             let path = (source as NSString).expandingTildeInPath
+            var runtimeDictionary = [String: String]()
             try await commandRunner.run(
               .open(.init(path: path)),
-              snapshot: UserSpace.shared.snapshot(resolveUserEnvironment: false)
+              snapshot: UserSpace.shared.snapshot(resolveUserEnvironment: false),
+              shortcut: .empty(),
+              machPortEvent: machPortEvent,
+              checkCancellation: false,
+              repeatingEvent: false,
+              runtimeDictionary: &runtimeDictionary
             )
           }
         case .reveal(let path):

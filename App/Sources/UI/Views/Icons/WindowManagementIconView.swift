@@ -3,89 +3,111 @@ import Inject
 import SwiftUI
 
 struct WindowManagementIconView: View {
-  @ObserveInjection var inject
   let size: CGFloat
-  @Binding var stacked: Bool
 
   var body: some View {
     HStack(alignment: .top, spacing: 0) {
       VStack {
-        windowControls()
+        WindowManagementIconWindowControlsView(size: size)
         Spacer()
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .background(sidebarBackground())
+      .background(WindowManagementIconBackgroundView())
 
-      Divider()
-        .background(Color(.systemGray))
-      Divider()
-        .background(Color.white)
+      let rectangleWidth = size * 0.0125
 
-      window()
+      Rectangle()
+        .fill(Color(.systemGray))
+        .frame(width: rectangleWidth)
+      Rectangle()
+        .fill(Color.white)
+        .frame(width: rectangleWidth)
+
+      WindowManagementIconWindowView(size: size)
         .frame(width: size * 0.182)
     }
+    .overlay { iconBorder(size) }
     .background()
     .compositingGroup()
-    .clipShape(RoundedRectangle(cornerRadius: 4))
+    .iconShape(size)
     .frame(width: size, height: size)
     .fixedSize()
-    .stacked($stacked, color: Color(.systemRed), size: size)
-    .enableInjection()
   }
+}
 
-  func sidebarBackground() -> some View {
+private struct WindowManagementIconBackgroundView: View {
+  var body: some View {
     Rectangle()
       .fill(Color(nsColor: NSColor(red:0.94, green:0.71, blue:0.51, alpha:1.00)))
       .overlay {
+        // Yellow
         LinearGradient(stops: [
           .init(color: Color.clear, location: 0.1),
-          .init(color: Color(.systemYellow).opacity(0.8), location: 0.2),
+          .init(color: Color(nsColor: NSColor(red:0.95, green:0.70, blue:0.25, alpha:1.00)), location: 0.2),
           .init(color: Color(nsColor: NSColor(red:0.94, green:0.71, blue:0.51, alpha:1.00)), location: 1.0),
         ], startPoint: .top, endPoint: .bottom)
 
-        Rectangle()
-          .fill(
-            LinearGradient(
-              gradient: Gradient(stops: [
-                .init(color: Color(nsColor: NSColor(red:0.80, green:0.93, blue:0.99, alpha:1.00)),
-                      location: 0.0),
-                .init(color: .clear, location: 0.75),
-              ]),
-              startPoint: .topTrailing,
-              endPoint: .bottomLeading
-            )
-          )
+        // Blue
+        LinearGradient(
+          gradient: Gradient(stops: [
+            .init(color: Color(nsColor: NSColor(red:0.29, green:0.64, blue:0.87, alpha:1.00)),
+                  location: 0.0),
+            .init(color: .clear, location: 0.60),
+          ]),
+          startPoint: .topTrailing,
+          endPoint: .bottomLeading)
 
-        Rectangle()
-          .fill(
-            LinearGradient(
-              gradient: Gradient(stops: [
-                .init(color: Color(.systemPink).opacity(0.4), location: 0.0),
-                .init(color: .clear, location: 1.0),
-              ]),
-              startPoint: .bottomLeading,
-              endPoint: .leading
-            )
-          )
+        LinearGradient(
+          gradient: Gradient(stops: [
+            .init(color: Color(.systemPink).opacity(0.4), location: 0.0),
+            .init(color: .clear, location: 1.0),
+          ]),
+          startPoint: .bottomLeading,
+          endPoint: .leading
+        )
 
-        Rectangle()
-          .fill(
-            LinearGradient(
-              gradient: Gradient(stops: [
-                .init(color: Color(.systemRed).opacity(0.6), location: 0.0),
-                .init(color: .clear, location: 0.25),
+        LinearGradient(
+          gradient: Gradient(stops: [
+            .init(color: Color(.systemRed), location: 0.2),
+            .init(color: .clear, location: 0.5),
+          ]),
+          startPoint: .bottomLeading,
+          endPoint: .trailing
+        )
+
+        LinearGradient(
+          gradient: Gradient(
+            stops:
+              [
+                .init(color: .clear, location: 0.0),
+                .init(color: Color(nsColor: NSColor(red:0.91, green:0.20, blue:0.45, alpha:1.00)), location: 0.25),
+                .init(color: .clear, location: 0.6),
               ]),
-              startPoint: .bottomLeading,
-              endPoint: .trailing
-            )
-          )
+          startPoint: .bottomLeading,
+          endPoint: .trailing
+        )
+
+        LinearGradient(
+          gradient: Gradient(stops: [
+            .init(color: Color(nsColor: NSColor(red:0.44, green:0.25, blue:0.51, alpha:1.00)), location: 0),
+            .init(color: .clear, location: 0.3),
+          ]),
+          startPoint: .bottomLeading,
+          endPoint: .topTrailing
+        )
       }
-      .blur(radius: 0.2)
+      .blur(radius: 1)
       .compositingGroup()
+      .drawingGroup()
   }
+}
 
-  func windowControls() -> some View {
+private struct WindowManagementIconWindowControlsView: View {
+  let size: CGFloat
+  var body: some View {
     HStack(spacing: size * 0.0_55) {
+      let circleHeight = size * 0.15
+
       Circle()
         .fill(
           LinearGradient(stops: [
@@ -95,15 +117,7 @@ struct WindowManagementIconView: View {
                          startPoint: .top,
                          endPoint: .bottom)
         )
-        .overlay {
-          Image(systemName: "xmark")
-            .resizable()
-            .aspectRatio(contentMode: .fit)
-            .foregroundStyle(Color.black.opacity(0.4))
-            .shadow(color: Color(.red).opacity(0.7), radius: 1)
-            .padding(size * 0.0_4)
-        }
-        .frame(height: size * 0.15)
+        .frame(height: circleHeight)
       Circle()
         .fill(
           LinearGradient(colors: [
@@ -111,15 +125,7 @@ struct WindowManagementIconView: View {
             Color(.systemYellow)
           ], startPoint: .top, endPoint: .bottom)
         )
-        .overlay {
-          Image(systemName: "minus")
-            .resizable()
-            .aspectRatio(contentMode: .fit)
-            .foregroundStyle(Color.black.opacity(0.4))
-            .shadow(color: Color(.white).opacity(0.7), radius: 1)
-            .padding(size * 0.0_4)
-        }
-        .frame(height: size * 0.15)
+        .frame(height: circleHeight)
       Circle()
         .fill(
           LinearGradient(colors: [
@@ -127,31 +133,29 @@ struct WindowManagementIconView: View {
             Color(.systemGreen)
           ], startPoint: .topLeading, endPoint: .bottomTrailing)
         )
-        .overlay {
-          Image(systemName: "arrow.up.left.and.arrow.down.right")
-            .resizable()
-            .aspectRatio(contentMode: .fit)
-            .foregroundStyle(Color.black.opacity(0.4))
-            .shadow(color: Color(.green).opacity(0.7), radius: 1)
-            .padding(size * 0.0_4)
-        }
-        .frame(height: size * 0.15)
+        .frame(height: circleHeight)
     }
     .compositingGroup()
     .shadow(radius: size * 0.0_05, y: 1)
     .fontWeight(.bold)
     .padding([.top, .leading, .trailing], size * 0.0_5)
     .frame(height: size * 0.25)
+    .drawingGroup()
   }
+}
 
-  func window() -> some View {
+private struct WindowManagementIconWindowView: View {
+  let size: CGFloat
+  var body: some View {
     VStack(spacing: 0) {
       Rectangle()
         .frame(height: size * 0.30)
-      Divider()
-        .background(Color.white)
-      Divider()
-        .background(Color(.systemGray))
+      Rectangle()
+        .fill(Color(.white))
+        .frame(height: size * 0.0125)
+      Rectangle()
+        .fill(Color(.systemGray))
+        .frame(height: size * 0.0125)
       Rectangle()
         .fill(Color(.systemGray).opacity(0.4))
     }
@@ -162,20 +166,16 @@ struct WindowManagementIconView: View {
 struct WindowManagementIconView_Previews: PreviewProvider {
   @State static var stacked: Bool = true
   static var previews: some View {
-    VStack {
-      HStack {
-        WindowManagementIconView(size: 128, stacked: .constant(false))
-        WindowManagementIconView(size: 64, stacked: .constant(false))
-        WindowManagementIconView(size: 32, stacked: .constant(false))
+    HStack(alignment: .top, spacing: 8) {
+      WindowManagementIconView(size: 192)
+      VStack(alignment: .leading, spacing: 8) {
+        WindowManagementIconView(size: 128)
+        HStack(alignment: .top, spacing: 8) {
+          WindowManagementIconView(size: 64)
+          WindowManagementIconView(size: 32)
+          WindowManagementIconView(size: 16)
+        }
       }
-      HStack {
-        WindowManagementIconView(size: 128, stacked: .constant(true))
-        WindowManagementIconView(size: 64, stacked: .constant(true))
-        WindowManagementIconView(size: 32, stacked: .constant(true))
-      }
-    }
-    .onTapGesture {
-      stacked.toggle()
     }
     .padding()
   }

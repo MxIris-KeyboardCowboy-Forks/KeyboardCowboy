@@ -1,5 +1,6 @@
 import Apps
 import Foundation
+import MachPort
 import SwiftUI
 
 enum DetailViewActionReducerResult {
@@ -55,6 +56,8 @@ final class DetailViewActionReducer {
             shortcuts: keyboardShortcuts
           )
         )
+      case .updateSnippet(_, let trigger):
+        workflow.trigger = .snippet(.init(id: trigger.id, text: trigger.text))
       case .updateHoldDuration(_, let holdDuration):
         guard case .keyboardShortcuts(var trigger) = workflow.trigger else {
           return .none
@@ -79,6 +82,8 @@ final class DetailViewActionReducer {
         switch action {
         case .addKeyboardShortcut:
           workflow.trigger = .keyboardShortcuts(.init(shortcuts: []))
+        case .addSnippet:
+          workflow.trigger = .snippet(.init(id: UUID().uuidString, text: ""))
         case .removeKeyboardShortcut:
           workflow.trigger = nil
         case .addApplication:
@@ -110,6 +115,12 @@ final class DetailViewActionReducer {
                 contexts.remove(.launched)
               }
 
+              if viewModelTrigger.contexts.contains(.resignFrontMost) {
+                contexts.insert(.resignFrontMost)
+              } else {
+                contexts.remove(.resignFrontMost)
+              }
+
               return ApplicationTrigger(id: viewModelTrigger.id,
                                         application: viewModelTrigger.application,
                                         contexts: Array(contexts))
@@ -138,24 +149,42 @@ final class DetailViewActionReducer {
               newTrigger.contexts.remove(.launched)
             }
 
+            if viewModelTrigger.contexts.contains(.resignFrontMost) {
+              newTrigger.contexts.insert(.resignFrontMost)
+            } else {
+              newTrigger.contexts.remove(.resignFrontMost)
+            }
+
             previousTriggers[index] = newTrigger
             workflow.trigger = .application(previousTriggers)
           }
         }
       case .updateExecution(_, let execution):
-        switch execution {
-        case .concurrent:
-          workflow.execution = .concurrent
-        case .serial:
-          workflow.execution = .serial
-        }
+          switch execution {
+            case .concurrent:
+              workflow.execution = .concurrent
+            case .serial:
+              workflow.execution = .serial
+          }
       case .runWorkflow:
+        guard let machPortEvent = MachPortEvent.empty() else { return .none }
+
         let commands = workflow.commands.filter(\.isEnabled)
         switch workflow.execution {
         case .concurrent:
-          commandRunner.concurrentRun(commands, checkCancellation: true, resolveUserEnvironment: true)
+          commandRunner.concurrentRun(
+            commands, checkCancellation: true,
+            resolveUserEnvironment: true, shortcut: .empty(),
+            machPortEvent: machPortEvent,
+            repeatingEvent: false
+          )
         case .serial:
-          commandRunner.serialRun(commands, checkCancellation: true, resolveUserEnvironment: true)
+          commandRunner.serialRun(
+            commands, checkCancellation: true,
+            resolveUserEnvironment: true, shortcut: .empty(),
+            machPortEvent: machPortEvent,
+            repeatingEvent: false
+          )
         }
         return .none
       }

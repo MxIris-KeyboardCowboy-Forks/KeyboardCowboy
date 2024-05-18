@@ -16,6 +16,15 @@ extension View {
       .animation(.easeInOut(duration: 3.0), value: stacked.wrappedValue)
   }
 
+  func iconShape(_ size: CGFloat) -> some View {
+    self
+      .clipShape(RoundedRectangle(cornerRadius: size * 0.2))
+  }
+
+  @ViewBuilder
+  func iconOverlay() -> some View { IconOverlayView() }
+  func iconBorder(_ size: CGFloat) -> some View { IconBorderView(size) }
+
   @ViewBuilder
   func transform<Transform: View>(_ transform: (Self) -> Transform) -> some View {
     transform(self)
@@ -32,7 +41,7 @@ extension View {
     if condition { transform(self) } else { self }
   }
 
-  @ViewBuilder
+  @MainActor @ViewBuilder
   func debugEdit(_ file: StaticString = #file) -> some View {
     if launchArguments.isEnabled(.debugEditing) {
       DebugView(file: "\(file)", content: { self })
@@ -58,6 +67,50 @@ extension View {
     self
       .modifier(GeometryPreferenceKeyView<FramePreferenceKey>(space: space, transform: { $0.frame(in: space) }))
       .onPreferenceChange(FramePreferenceKey.self, perform: perform)
+  }
+}
+
+private struct IconBorderView: View {
+  let size: CGFloat
+
+  init(_ size: CGFloat) {
+    self.size = size
+  }
+
+  var body: some View {
+    LinearGradient(stops: [
+      .init(color: Color(.white).opacity(0.15), location: 0.25),
+      .init(color: Color(.black).opacity(0.25), location: 1.0),
+    ], startPoint: .top, endPoint: .bottom)
+    .mask {
+      RoundedRectangle(cornerRadius: size * 0.2)
+        .stroke(lineWidth: size * 0.025)
+    }
+  }
+}
+
+private struct IconOverlayView: View {
+  var body: some View {
+    AngularGradient(stops: [
+      .init(color: Color.clear, location: 0.0),
+      .init(color: Color.white.opacity(0.2), location: 0.2),
+      .init(color: Color.clear, location: 1.0),
+    ], center: .bottomLeading)
+
+    LinearGradient(stops: [
+      .init(color: Color.white.opacity(0.2), location: 0),
+      .init(color: Color.clear, location: 0.3),
+    ], startPoint: .top, endPoint: .bottom)
+
+    LinearGradient(stops: [
+      .init(color: Color.clear, location: 0.8),
+      .init(color: Color(.windowBackgroundColor).opacity(0.3), location: 1.0),
+    ], startPoint: .top, endPoint: .bottom)
+
+    LinearGradient(stops: [
+      .init(color: Color.clear, location: 0.8),
+      .init(color: Color(.windowBackgroundColor).opacity(0.3), location: 1.0),
+    ], startPoint: .top, endPoint: .bottom)
   }
 }
 
@@ -117,20 +170,20 @@ struct ViewExtensions_Previews: PreviewProvider {
   static var previews: some View {
     VStack {
       HStack {
-        WindowManagementIconView(size: 128, stacked: .constant(false))
-        WindowManagementIconView(size: 64, stacked: .constant(false))
-        WindowManagementIconView(size: 32, stacked: .constant(false))
+        WindowManagementIconView(size: 128)
+        WindowManagementIconView(size: 64)
+        WindowManagementIconView(size: 32)
       }
       HStack {
-        WindowManagementIconView(size: 128, stacked: .constant(true))
-        WindowManagementIconView(size: 64, stacked: .constant(true))
-        WindowManagementIconView(size: 32, stacked: .constant(true))
+        WindowManagementIconView(size: 128)
+        WindowManagementIconView(size: 64)
+        WindowManagementIconView(size: 32)
       }
 
       VStack(spacing: 0) {
-        UIElementIconView(size: 32, stacked: $stacked)
-        MenuIconView(size: 32, stacked: $stacked)
-        WindowManagementIconView(size: 32, stacked: $stacked)
+        UIElementIconView(size: 32)
+        MenuIconView(size: 32)
+        WindowManagementIconView(size: 32)
       }
       .background()
     }

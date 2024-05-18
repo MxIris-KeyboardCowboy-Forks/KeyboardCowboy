@@ -34,7 +34,7 @@ struct UserModesView: View {
         })
       }
 
-      FlowLayout(proposedViewSize: .unspecified) {
+      FlowLayout(itemSpacing: 2, lineSpacing: 2) {
         ForEach(publisher.data.userModes) { userMode in
           FlowItem(userMode: userMode, onAction: { }, onDelete: {
             onAction(.delete(userMode.id))
@@ -50,7 +50,6 @@ struct UserModesView: View {
 }
 
 struct FlowItem: View {
-  @ObserveInjection var inject
   @State var isHovered: Bool = false
   @State var areYouSure: Bool = false
   @State var rename: Bool = false
@@ -81,7 +80,7 @@ struct FlowItem: View {
       Button(action: {
         areYouSure = true
       }, label: {
-        Image(systemName: "xmark.circle")
+        Image(systemName: "xmark.circle.fill")
           .resizable()
           .aspectRatio(contentMode: .fit)
           .frame(width: 12)
@@ -137,7 +136,6 @@ struct FlowItem: View {
       .buttonStyle(.regular)
       .font(.caption)
     })
-    .enableInjection()
   }
 }
 

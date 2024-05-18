@@ -13,7 +13,7 @@ enum UserSpaceError: Error {
   case unableToGetDocumentPath
 }
 
-final class UserSpace: Sendable {
+final class UserSpace: @unchecked Sendable {
   enum EnvironmentKey: String, CaseIterable {
     case currentWorkingDirectory = "CURRENT_WORKING_DIRECTORY"
     case directory = "DIRECTORY"
@@ -22,8 +22,21 @@ final class UserSpace: Sendable {
     case filename = "FILENAME"
     case `extension` = "EXTENSION"
     case selectedText = "SELECTED_TEXT"
+    case pasteboard = "PASTEBOARD"
 
     var asTextVariable: String { "$\(rawValue)" }
+    var help: String {
+      switch self {
+      case .currentWorkingDirectory: "The current working directory"
+      case .directory: "The current directory"
+      case .file: "The current file"
+      case .filepath: "The path to the file"
+      case .filename: "The file name"
+      case .extension: "The file extension"
+      case .selectedText: "The current selected text"
+      case .pasteboard: "The contents of the pasteboard"
+      }
+    }
   }
 
   struct Application: @unchecked Sendable {
@@ -44,19 +57,17 @@ final class UserSpace: Sendable {
     let selections: [String]
     let windows: WindowStoreSnapshot
 
-    init(
-      documentPath: String? = nil,
-      frontMostApplication: Application = .current,
-      modes: [UserMode] = [],
-      previousApplication: Application = .current,
-      selectedText: String = "",
-      selections: [String] = [],
-      windows: WindowStoreSnapshot = WindowStoreSnapshot(
-        frontMostApplicationWindows: [],
-        visibleWindowsInStage: [],
-        visibleWindowsInSpace: []
-      )
-    ) {
+    init(documentPath: String? = nil,
+         frontMostApplication: Application,
+         modes: [UserMode] = [],
+         previousApplication: Application,
+         selectedText: String = "",
+         selections: [String] = [],
+         windows: WindowStoreSnapshot = WindowStoreSnapshot(
+          frontMostApplicationWindows: [],
+          visibleWindowsInStage: [],
+          visibleWindowsInSpace: []
+         )) {
       self.documentPath = documentPath
       self.frontMostApplication = frontMostApplication
       self.modes = modes
@@ -66,7 +77,7 @@ final class UserSpace: Sendable {
       self.windows = windows
     }
 
-    func interpolateUserSpaceVariables(_ value: String) -> String {
+    func interpolateUserSpaceVariables(_ value: String, runtimeDictionary: [String: String]) -> String {
       var interpolatedString = value.replacingOccurrences(of: .selectedText, with: selectedText)
 
       if let filePath = documentPath, let url = URL(string: filePath) {
@@ -89,7 +100,17 @@ final class UserSpace: Sendable {
             .replacingOccurrences(of: .file, with: lastPathComponent as String)
             .replacingOccurrences(of: .filepath, with: (url.lastPathComponent as NSString).pathExtension)
             .replacingOccurrences(of: .extension, with: (url.lastPathComponent as NSString).pathExtension)
+
         }
+      }
+
+      if let pasteboard = NSPasteboard.general.string(forType: .string) {
+        interpolatedString = interpolatedString.replacingOccurrences(of: .pasteboard, with: pasteboard)
+      }
+
+
+      for (key, value) in runtimeDictionary {
+        interpolatedString = interpolatedString.replacingOccurrences(of: "$"+key, with: value)
       }
       return interpolatedString
     }
@@ -115,9 +136,14 @@ final class UserSpace: Sendable {
           environment[.filepath] = components.path.replacingOccurrences(of: "%20", with: " ")
           environment[.filename] = (url.lastPathComponent as NSString).deletingPathExtension
           environment[.extension] = (url.lastPathComponent as NSString).pathExtension
+
         }
       }
 
+      if let pasteboard = NSPasteboard.general.string(forType: .string) {
+        environment[.pasteboard] = pasteboard
+      }
+      
       return environment
     }
   }
@@ -134,11 +160,12 @@ final class UserSpace: Sendable {
     }
   }
 
+  @MainActor
   static let shared = UserSpace()
 
-  @Published private(set) var frontMostApplication: Application = .current
-  @Published private(set) var previousApplication: Application = .current
-  @Published private(set) var runningApplications: [Application] = [Application.current]
+  @Published private(set) var frontMostApplication: Application
+  @Published private(set) var previousApplication: Application
+  @Published private(set) var runningApplications: [Application]
   public let userModesPublisher = UserModesPublisher([])
   private(set) var userModes: [UserMode] = []
   private var frontmostApplicationSubscription: AnyCancellable?
@@ -147,7 +174,12 @@ final class UserSpace: Sendable {
 
   var machPort: MachPortEventController?
 
+  @MainActor
   private init(workspace: NSWorkspace = .shared) {
+    frontMostApplication = .current
+    previousApplication = .current
+    runningApplications = [Application.current]
+
     frontmostApplicationSubscription = workspace.publisher(for: \.frontmostApplication)
       .compactMap { $0 }
       .sink { [weak self] runningApplication in
@@ -267,7 +299,7 @@ final class UserSpace: Sendable {
   private func selectedText() async throws -> String {
     let systemElement = SystemAccessibilityElement()
     let focusedElement = try systemElement.focusedUIElement()
-    var selectedText = focusedElement.selectedText()
+    let selectedText = focusedElement.selectedText()
     if selectedText == nil && (try? focusedElement.value(.role, as: String.self)) == "AXWebArea" {
       // MARK: Fix this
       // It doesn't work well in Safari.
@@ -282,8 +314,8 @@ final class UserSpace: Sendable {
       NSPasteboard.general.string(forType: .string)
     }
 
-    try? machPort?.post(kVK_ANSI_C, type: .keyDown, flags: .maskCommand)
-    try? machPort?.post(kVK_ANSI_C, type: .keyUp, flags: .maskCommand)
+    _ = try? machPort?.post(kVK_ANSI_C, type: .keyDown, flags: .maskCommand)
+    _ = try? machPort?.post(kVK_ANSI_C, type: .keyUp, flags: .maskCommand)
 
     try await Task.sleep(for: .seconds(0.1))
 
@@ -352,9 +384,9 @@ fileprivate extension NSRunningApplication {
           path: userSpaceApplication.path
         )
       } else if let name = localizedName,
-                let path = bundleURL?.path() {
+                let path = bundleURL?.path().removingPercentEncoding {
 
-        UserSpace.cache[bundleIdentifier] = .init(
+        UserSpace.cache[bundleIdentifier] = RunningApplicationCache(
           name: name,
           path: path,
           bundleIdentifier: bundleIdentifier

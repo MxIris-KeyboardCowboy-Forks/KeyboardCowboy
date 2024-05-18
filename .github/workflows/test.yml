@@ -7,7 +7,7 @@ jobs:
     runs-on: macos-13
     strategy:
         matrix:
-          xcode: ['15.0.1']
+          xcode: ['15.2']
     steps:
       - name: Set Xcode ${{ matrix.xcode }}
         run: |
@@ -20,7 +20,7 @@ jobs:
           swift package --version
       - name: Checkout
         uses: actions/checkout@main
-      - name: Install and run tuist
+      - name: Install & Run tuist
         run: |
           touch .env
           echo "APP_NAME=Keyboard Cowboy" >> .env
@@ -29,7 +29,7 @@ jobs:
           echo -e "TEAM_ID=XXXXXXXXXX" >> .env
           echo -e "PACKAGE_DEVELOPMENT=false" >> .env
           brew install tuist
-          tuist fetch
+          tuist install
           tuist generate -n
       - name: Run tests
         uses: sersoft-gmbh/xcodebuild-action@v2

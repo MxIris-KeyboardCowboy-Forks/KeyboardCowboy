@@ -1,24 +1,31 @@
 import Apps
 import Bonzai
+import CoreTransferable
 import Foundation
 
-struct CommandViewModel: Codable, Hashable, Identifiable {
+struct CommandViewModel: Codable, Hashable, Identifiable, Transferable {
+  static var transferRepresentation: some TransferRepresentation {
+    CodableRepresentation(contentType: .command)
+  }
+
   struct MetaData: Identifiable, Codable, Hashable, Sendable {
     var id: String
     var delay: Double?
     var name: String
     var namePlaceholder: String
     var isEnabled: Bool
-    var notification: Bool
+    var notification: Command.Notification?
     var icon: Icon?
+    var variableName: String
 
     init(id: String = UUID().uuidString,
          delay: Double? = nil,
          name: String,
          namePlaceholder: String,
          isEnabled: Bool = true,
-         notification: Bool = false,
-         icon: Icon? = nil) {
+         notification: Command.Notification? = nil,
+         icon: Icon? = nil,
+         variableName: String = "") {
       self.id = id
       self.delay = delay
       self.name = name
@@ -26,6 +33,7 @@ struct CommandViewModel: Codable, Hashable, Identifiable {
       self.isEnabled = isEnabled
       self.notification = notification
       self.icon = icon
+      self.variableName = variableName
     }
   }
 
@@ -90,7 +98,14 @@ struct CommandViewModel: Codable, Hashable, Identifiable {
     struct MenuBarModel: Codable, Hashable, Identifiable, Sendable {
       let id: String
       var placeholder: String { "Click MenuBar Item …" }
+      var application: Application?
       var tokens: [MenuBarCommand.Token]
+
+      init(id: String, application: Application? = nil, tokens: [MenuBarCommand.Token]) {
+        self.id = id
+        self.application = application
+        self.tokens = tokens
+      }
     }
 
     struct ScriptModel: Codable, Hashable, Identifiable, Sendable {
@@ -98,6 +113,8 @@ struct CommandViewModel: Codable, Hashable, Identifiable {
       var placeholder: String { "Run Script …" }
       var source: ScriptCommand.Source
       var scriptExtension: ScriptCommand.Kind
+      var variableName: String
+      var execution: Workflow.Execution
     }
 
     struct ShortcutModel: Codable, Hashable, Identifiable, Sendable {

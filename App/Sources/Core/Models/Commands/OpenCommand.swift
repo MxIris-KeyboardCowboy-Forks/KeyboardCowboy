@@ -28,10 +28,16 @@ struct OpenCommand: MetaDataProviding {
   public init(id: String = UUID().uuidString,
               name: String = "",
               application: Application? = nil, path: String,
-              notification: Bool = false) {
+              notification: Command.Notification? = nil) {
     self.application = application
     self.path = path
     self.meta = Command.MetaData(id: id, name: name, isEnabled: true, notification: notification)
+  }
+
+  init(application: Application?, path: String, meta: Command.MetaData) {
+    self.application = application
+    self.path = path
+    self.meta = meta
   }
 
   public init(from decoder: Decoder) throws {
@@ -46,10 +52,14 @@ struct OpenCommand: MetaDataProviding {
       self.meta = try MetaDataMigrator.migrate(decoder)
     }
   }
+
+  func copy() -> OpenCommand {
+    OpenCommand(application: application, path: path, meta: meta.copy())
+  }
 }
 
 extension OpenCommand {
   static func empty() -> OpenCommand {
-    OpenCommand(path: "/Applications", notification: false)
+    OpenCommand(path: "/Applications", notification: nil)
   }
 }

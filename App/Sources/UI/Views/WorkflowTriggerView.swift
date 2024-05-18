@@ -1,13 +1,16 @@
 import Bonzai
+import Inject
 import SwiftUI
 
 struct WorkflowTriggerView: View {
   enum Action {
     case addApplication
     case addKeyboardShortcut
+    case addSnippet
     case removeKeyboardShortcut
   }
 
+  @ObserveInjection var inject
   @Binding private var isGrayscale: Bool
   private let onAction: (Action) -> Void
   private var focus: FocusState<AppFocus?>.Binding
@@ -27,60 +30,91 @@ struct WorkflowTriggerView: View {
         FocusableButton(
           focus,
           identity: .detail(.addAppTrigger),
-          variant: .zen(.init(color: .systemBlue, 
+          variant: .zen(.init(calm: true,
+                              color: .systemBlue,
                               focusEffect: .constant(true),
                               grayscaleEffect: $isGrayscale)),
           action: { onAction(.addApplication) }
         ) {
-          HStack(spacing: 8) {
-            Image(systemName: "app.dashed")
-              .resizable()
-              .aspectRatio(contentMode: .fit)
-              .frame(width: 12)
+          HStack(spacing: 6) {
+            GenericAppIconView(size: 20)
             Text("Application")
+              .font(.caption)
               .lineLimit(1)
           }
-          .padding(6)
           .frame(maxWidth: .infinity)
         }
         .onMoveCommand(perform: { direction in
           switch direction {
           case .right:
             focus.wrappedValue = .detail(.addKeyboardTrigger)
-          default:
-            break
+          default: break
           }
         })
 
-        Spacer()
+        ZenDivider(.vertical)
+          .frame(height: 24)
 
         FocusableButton(
           focus,
           identity: .detail(.addKeyboardTrigger),
-          variant: .zen(.init(color: .systemCyan,
+          variant: .zen(.init(calm: true,
+                              color: .systemIndigo,
                               focusEffect: .constant(true),
                               grayscaleEffect: $isGrayscale)),
           action: {
             onAction(.addKeyboardShortcut)
           }
         ) {
-          HStack(spacing: 8) {
-            Image(systemName: "command")
-              .resizable()
-              .aspectRatio(contentMode: .fit)
-              .frame(width: 12)
+          HStack(spacing: 6) {
+            KeyboardIconView("M", size: 20)
             Text("Keyboard Shortcut")
+              .allowsTightening(true)
               .lineLimit(1)
+              .font(.caption)
           }
-          .padding(6)
           .frame(maxWidth: .infinity)
         }
         .onMoveCommand(perform: { direction in
           switch direction {
           case .left:
             focus.wrappedValue = .detail(.addAppTrigger)
-          default:
-            break
+          case .right:
+            focus.wrappedValue = .detail(.addSnippetTrigger)
+          default: break
+          }
+        })
+
+        ZenDivider(.vertical)
+          .frame(height: 24)
+
+        FocusableButton(
+          focus,
+          identity: .detail(.addSnippetTrigger),
+          variant: .zen(.init(calm: true,
+                              color: .systemPurple,
+                              focusEffect: .constant(true),
+                              grayscaleEffect: $isGrayscale)),
+          action: {
+            onAction(.addSnippet)
+            focus.wrappedValue = .detail(.snippet)
+          }
+        ) {
+
+          
+          HStack(spacing: 6) {
+            SnippetIconView(size: 20)
+            Text("Snippet")
+              .font(.caption)
+              .lineLimit(1)
+          }
+          .frame(maxWidth: .infinity)
+        }
+        .onMoveCommand(perform: { direction in
+          switch direction {
+          case .left:
+            focus.wrappedValue = .detail(.addKeyboardTrigger)
+          default: break
           }
         })
       }
@@ -91,11 +125,10 @@ struct WorkflowTriggerView: View {
         focus.wrappedValue = .detail(.name)
       })
       .frame(maxWidth: .infinity)
-      .padding(8)
-      .background(Color(.gridColor))
-      .cornerRadius(8)
+      .roundedContainer(padding: 8, margin: 0)
     }
     .buttonStyle(.regular)
+    .enableInjection()
   }
 }
 

@@ -10,10 +10,8 @@ struct TypeCommandView: View {
     case updateMode(newMode: TextCommand.TypeCommand.Mode)
     case commandAction(CommandContainerAction)
   }
-  @EnvironmentObject var selection: SelectionManager<CommandViewModel>
-  @State var metaData: CommandViewModel.MetaData
-  @State var model: CommandViewModel.Kind.TypeModel
-  private let debounce: DebounceManager<String>
+  private let metaData: CommandViewModel.MetaData
+  private let model: CommandViewModel.Kind.TypeModel
   private let onAction: (Action) -> Void
   private let iconSize: CGSize
 
@@ -21,35 +19,67 @@ struct TypeCommandView: View {
        model: CommandViewModel.Kind.TypeModel,
        iconSize: CGSize,
        onAction: @escaping (Action) -> Void) {
-    _metaData = .init(initialValue: metaData)
-    _model = .init(initialValue: model)
+    self.metaData = metaData
+    self.model = model
     self.iconSize = iconSize
-    debounce = DebounceManager(for: .milliseconds(500)) { newInput in
-      onAction(.updateSource(newInput: newInput))
-    }
     self.onAction = onAction
   }
 
   var body: some View {
     CommandContainerView(
-      $metaData,
+      metaData,
       placeholder: model.placeholder,
       icon: { metaData in
-        RegularKeyIcon(letter: "...", width: iconSize.width, height: iconSize.height)
-          .fixedSize()
+        TypingIconView(size: iconSize.width)
       }, content: { metaData in
-        ZenTextEditor(
-          color: ZenColorPublisher.shared.color,
-          text: $model.input,
-          placeholder: "Enter text...", onCommandReturnKey: nil)
-          .onChange(of: model.input) { debounce.send($0) }
-          .roundedContainer(padding: 0, margin: 0)
-      }, subContent: { _ in
-        TypeCommandModeView(mode: model.mode) { newMode in
-          onAction(.updateMode(newMode: newMode))
+        TypeCommandContentView(model, onAction: onAction)
+          .roundedContainer(4, padding: 0, margin: 0)
+      }, subContent: { metaData in
+        HStack {
+          ZenCheckbox("Notify", style: .small, isOn: Binding(get: {
+            if case .bezel = metaData.notification.wrappedValue { return true } else { return false }
+          }, set: { newValue in
+            metaData.notification.wrappedValue = newValue ? .bezel : nil
+            onAction(.commandAction(.toggleNotify(newValue ? .bezel : nil)))
+          })) { value in
+            if value {
+              onAction(.commandAction(.toggleNotify(metaData.notification.wrappedValue)))
+            } else {
+              onAction(.commandAction(.toggleNotify(nil)))
+            }
+          }
+          .offset(x: 1)
+
+          Spacer()
+
+          TypeCommandModeView(mode: model.mode) { newMode in
+            onAction(.updateMode(newMode: newMode))
+          }
         }
       }, onAction: { onAction(.commandAction($0)) })
     .enableInjection()
+  }
+}
+
+private struct TypeCommandContentView: View {
+  @State var model: CommandViewModel.Kind.TypeModel
+  private let onAction: (TypeCommandView.Action) -> Void
+  private let debounce: DebounceManager<String>
+
+  init(_ model: CommandViewModel.Kind.TypeModel, onAction: @escaping (TypeCommandView.Action) -> Void) {
+    self.model = model
+    self.onAction = onAction
+    debounce = DebounceManager(for: .milliseconds(500)) { newInput in
+      onAction(.updateSource(newInput: newInput))
+    }
+  }
+
+  var body: some View {
+    ZenTextEditor(
+      color: ZenColorPublisher.shared.color,
+      text: $model.input,
+      placeholder: "Enter text...", onCommandReturnKey: nil)
+    .onChange(of: model.input) { debounce.send($0) }
   }
 }
 

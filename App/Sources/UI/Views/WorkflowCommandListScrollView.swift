@@ -4,8 +4,6 @@ struct WorkflowCommandListScrollView: View {
   @Environment(\.openWindow) private var openWindow
   @EnvironmentObject private var applicationStore: ApplicationStore
   @ObservedObject private var selectionManager: SelectionManager<CommandViewModel>
-  @State private var dropOverlayIsVisible: Bool = false
-  @State private var dropUrls = Set<URL>()
   private let onAction: (SingleDetailView.Action) -> Void
   private let publisher: CommandsPublisher
   private let scrollViewProxy: ScrollViewProxy?
@@ -13,6 +11,7 @@ struct WorkflowCommandListScrollView: View {
   private let workflowId: String
   private var focus: FocusState<AppFocus?>.Binding
   private var namespace: Namespace.ID
+  @State private var dropKind: TargetedKind = .reorder
 
   init(_ focus: FocusState<AppFocus?>.Binding,
        publisher: CommandsPublisher,
@@ -45,6 +44,37 @@ struct WorkflowCommandListScrollView: View {
             onCommandAction: onAction, onAction: { action in
             onAction(.commandView(workflowId: workflowId, action: action))
           })
+          .dropDestination(CommandListDropItem.self,
+                           color: .accentColor,
+                           kind: dropKind,
+                           onDrop: { items, location in
+            var urls = [URL]()
+            for item in items {
+              switch item {
+              case .command:
+                let ids = Array(selectionManager.selections)
+                guard let (from, destination) = publisher.data.commands.moveOffsets(
+                  for: command,
+                  with: ids
+                ) else {
+                  return false
+                }
+
+                withAnimation(WorkflowCommandListView.animation) {
+                  publisher.data.commands.move(fromOffsets: from, toOffset: destination)
+                }
+
+                onAction(.moveCommand(workflowId: workflowId, indexSet: from, toOffset: destination))
+              case .url(let url):
+                urls.append(url)
+              }
+            }
+
+            if !urls.isEmpty {
+              onAction(.dropUrls(workflowId: workflowId, urls: urls))
+            }
+            return true
+          })
           .contentShape(Rectangle())
           .contextMenu(menuItems: {
             WorkflowCommandListContextMenuView(
@@ -66,12 +96,14 @@ struct WorkflowCommandListScrollView: View {
             focus.wrappedValue = .detail(.applicationTriggers)
           case .keyboardShortcuts:
             focus.wrappedValue = .detail(.keyboardShortcuts)
+          case .snippet:
+            focus.wrappedValue = .detail(.addSnippetTrigger)
           case .empty:
             focus.wrappedValue = .detail(.addAppTrigger)
           }
         })
         .onCommand(#selector(NSResponder.selectAll(_:)), perform: {
-          selectionManager.selections = Set(publisher.data.commands.map(\.id))
+          selectionManager.publish(Set(publisher.data.commands.map(\.id)))
         })
         .onMoveCommand(perform: { direction in
           if let elementID = selectionManager.handle(direction, publisher.data.commands,

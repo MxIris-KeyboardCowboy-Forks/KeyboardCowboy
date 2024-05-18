@@ -15,16 +15,19 @@ final class KeyboardCowboyEngine {
   private let keyCodeStore: KeyCodesStore
   private let machPortCoordinator: MachPortCoordinator
   private let notificationCenterPublisher: NotificationCenterPublisher
+  private let snippetController: SnippetController
   private let shortcutStore: ShortcutStore
   private let workspace: NSWorkspace
   private let workspacePublisher: WorkspacePublisher
   private let uiElementCaptureStore: UIElementCaptureStore
+  private let workflowRunner: WorkflowRunning
 
   private var pendingPermissionsSubscription: AnyCancellable?
   private var frontmostApplicationSubscription: AnyCancellable?
   private var machPortController: MachPortEventController?
 
-  init(_ contentStore: ContentStore,
+  init(_ contentStore: ContentStore, 
+       applicationTriggerController: ApplicationTriggerController,
        commandRunner: CommandRunner,
        keyboardCommandRunner: KeyboardCommandRunner,
        keyboardShortcutsController: KeyboardShortcutsController,
@@ -33,21 +36,26 @@ final class KeyboardCowboyEngine {
        notificationCenter: NotificationCenter = .default,
        scriptCommandRunner: ScriptCommandRunner,
        shortcutStore: ShortcutStore,
+       snippetController: SnippetController,
        uiElementCaptureStore: UIElementCaptureStore,
+       workflowRunner: WorkflowRunning,
        workspace: NSWorkspace = .shared) {
-    
     self.contentStore = contentStore
     self.keyCodeStore = keyCodeStore
     self.commandRunner = commandRunner
     self.machPortCoordinator = machPortCoordinator
     self.shortcutStore = shortcutStore
     self.uiElementCaptureStore = uiElementCaptureStore
-    self.applicationTriggerController = ApplicationTriggerController(commandRunner)
+    self.applicationTriggerController = applicationTriggerController
+    self.snippetController = snippetController
     self.workspace = workspace
+    self.workflowRunner = workflowRunner
     self.workspacePublisher = WorkspacePublisher(workspace)
     self.notificationCenterPublisher = NotificationCenterPublisher(notificationCenter)
 
     guard KeyboardCowboy.env() != .previews else { return }
+
+    commandRunner.runners.application.delegate = applicationTriggerController
 
     guard !launchArguments.isEnabled(.disableMachPorts) else { return }
 
@@ -84,6 +92,7 @@ final class KeyboardCowboyEngine {
       machPortController = newMachPortController
       keyCodeStore.subscribe(to: notificationCenterPublisher.$keyboardSelectionDidChange)
       uiElementCaptureStore.subscribe(to: machPortCoordinator)
+      snippetController.subscribe(to: machPortCoordinator.$coordinatorEvent)
     } catch let error {
       NSAlert(error: error).runModal()
     }
@@ -93,6 +102,8 @@ final class KeyboardCowboyEngine {
 
   private func subscribe(to workspace: NSWorkspace) {
     WindowStore.shared.subscribe(to: UserSpace.shared.$frontMostApplication)
+
+    snippetController.subscribe(to: contentStore.groupStore.$groups)
 
     guard KeyboardCowboy.env() == .production else { return }
 

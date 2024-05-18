@@ -6,9 +6,26 @@ struct ScriptCommand: MetaDataProviding {
     case shellScript = "sh"
   }
 
-  enum Source: Hashable, Codable, Sendable {
+  enum Source: Hashable, Codable, Sendable, Equatable {
     case path(String)
     case inline(String)
+
+    var contents: String {
+      get {
+        switch self {
+        case .path(let contents): contents
+        case .inline(let contents): contents
+        }
+      }
+      set {
+        switch self {
+        case .path(let string):
+          self = .path(string)
+        case .inline(let string):
+          self = .inline(string)
+        }
+      }
+    }
   }
 
   var kind: Kind
@@ -17,11 +34,20 @@ struct ScriptCommand: MetaDataProviding {
 
   init(id: String = UUID().uuidString,
        name: String, kind: Kind, source: Source,
-       isEnabled: Bool = true, notification: Bool) {
+       isEnabled: Bool = true,
+       notification: Command.Notification? = nil,
+       variableName: String? = nil) {
     self.kind = kind
     self.source = source
     self.meta = Command.MetaData(
-      id: id, name: name, isEnabled: true, notification: notification)
+      id: id, name: name, isEnabled: true, 
+      notification: notification, variableName: variableName)
+  }
+
+  init(kind: Kind, source: Source, meta: Command.MetaData) {
+    self.kind = kind
+    self.source = source
+    self.meta = meta
   }
 
   init(from decoder: Decoder) throws {
@@ -58,7 +84,11 @@ struct ScriptCommand: MetaDataProviding {
         self.source = .inline(source)
       }
 
-      self.meta = Command.MetaData(id: id, name: name, isEnabled: isEnabled, notification: false)
+      self.meta = Command.MetaData(id: id, name: name, isEnabled: isEnabled, notification: nil)
     }
+  }
+
+  func copy() -> ScriptCommand {
+    ScriptCommand(kind: self.kind, source: self.source, meta: self.meta.copy())
   }
 }

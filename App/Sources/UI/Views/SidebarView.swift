@@ -1,9 +1,7 @@
 import Bonzai
-import Inject
 import SwiftUI
 
 struct SidebarView: View {
-  @ObserveInjection var inject
   enum Action {
     case refresh
     case openScene(AppScene)
@@ -41,58 +39,17 @@ struct SidebarView: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
-      SidebarConfigurationHeaderView()
-        .padding(.horizontal, 12)
-      SidebarConfigurationView(configSelectionManager) { action in
-        switch action {
-        case .deleteConfiguration(let id):
-          onAction(.deleteConfiguration(id: id))
-        case .updateName(let newName):
-          onAction(.updateConfiguration(name: newName))
-        case .addConfiguration(let name):
-          onAction(.addConfiguration(name: name))
-        case .selectConfiguration(let id):
-          onAction(.selectConfiguration(id))
-        }
-      }
-      .padding([.leading, .top, .trailing], 12)
+      ConfigurationContainerView(configSelectionManager: configSelectionManager,
+                                 onAction: onAction)
 
-      UserModesView { action in
-        onAction(.userMode(action))
-      }.padding([.leading, .top, .trailing], 12)
+      GroupContainerView(namespace,
+                         contentSelectionManager: contentSelectionManager,
+                         groupSelectionManager: groupSelectionManager,
+                         onAction: onAction,
+                         focus: focus)
 
-      HStack {
-        ZenLabel(.sidebar) { Text("Groups") }
-        Spacer()
-        SidebarAddGroupButtonView(isVisible: .readonly(!publisher.data.isEmpty),
-                                  namespace: namespace, onAction: {
-          onAction(.openScene(.addGroup))
-        })
-      }
-      .padding(.horizontal, 12)
-      .padding(.vertical, 6)
-
-      GroupsListView(focus,
-                     namespace: namespace,
-                     selectionManager: groupSelectionManager,
-                     contentSelectionManager: contentSelectionManager) { action in
-        switch action {
-        case .selectGroups(let ids):
-          onAction(.selectGroups(ids))
-        case .moveGroups(let source, let destination):
-          onAction(.moveGroups(source: source, destination: destination))
-        case .removeGroups(let ids):
-          onAction(.removeGroups(ids))
-        case .openScene(let scene):
-          onAction(.openScene(scene))
-        case .moveWorkflows(let workflowIds, let groupId):
-          onAction(.moveWorkflows(workflowIds: workflowIds, groupId: groupId))
-        case .copyWorkflows(let workflowIds, let groupId):
-          onAction(.copyWorkflows(workflowIds: workflowIds, groupId: groupId))
-        }
-      }
+      UserModeContainerView(onAction: onAction)
     }
-    .enableInjection()
   }
 }
 

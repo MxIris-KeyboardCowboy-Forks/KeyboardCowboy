@@ -51,7 +51,7 @@ struct MouseCommand: Identifiable, Codable, MetaDataProviding {
     }
   }
 
-  enum ClickLocation: Identifiable, Hashable, Codable {
+  enum ClickLocation: Identifiable, Hashable, Codable, Equatable {
     var id: String { identifier }
 
     case topLeading
@@ -109,7 +109,7 @@ struct MouseCommand: Identifiable, Codable, MetaDataProviding {
     }
   }
 
-  enum UIElement: Codable, Hashable {
+  enum UIElement: Codable, Hashable, Equatable {
     case focused(ClickLocation)
 
     var displayValue: String {
@@ -137,6 +137,10 @@ struct MouseCommand: Identifiable, Codable, MetaDataProviding {
 
   var meta: Command.MetaData
   var kind: Kind
+
+  func copy() -> MouseCommand {
+    MouseCommand(meta: self.meta.copy(), kind: self.kind)
+  }
 
   static func empty() -> MouseCommand {
     .init(meta: .init(), kind: .click(.focused(.center)))

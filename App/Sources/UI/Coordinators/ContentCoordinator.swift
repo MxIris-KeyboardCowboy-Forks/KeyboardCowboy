@@ -82,7 +82,7 @@ final class ContentCoordinator {
     }
   }
 
-  func handle(_ action: ContentListView.Action) {
+  func handle(_ action: ContentView.Action) {
     // TODO: We should get rid of this guard.
     guard let id = groupSelectionManager.selections.first,
           var group = store.group(withId: id) else { return }
@@ -112,8 +112,23 @@ final class ContentCoordinator {
 
   func handle(_ action: DetailView.Action) {
     switch action {
-    case .singleDetailView:
-      render(groupSelectionManager.selections, calculateSelections: false)
+    case .singleDetailView(let action):
+      switch action {
+      case .applicationTrigger:
+        render(groupSelectionManager.selections, calculateSelections: false)
+      case .commandView(_, let action):
+        switch action {
+        case .changeDelay, .toggleNotify, .run: break
+        case .toggleEnabled, .updateName, .modify, .remove:
+          render(groupSelectionManager.selections, calculateSelections: false)
+        }
+      case .dropUrls, .duplicate, .moveCommand, .removeCommands,
+          .removeTrigger, .setIsEnabled, .updateKeyboardShortcuts,
+          .updateName, .updateExecution, .updateSnippet:
+        render(groupSelectionManager.selections, calculateSelections: false)
+      case .togglePassthrough, .runWorkflow, .trigger, .updateHoldDuration:
+        break
+      }
     }
   }
 
@@ -135,7 +150,7 @@ final class ContentCoordinator {
       if groupIds.contains(group.id) {
         for wOffset in group.workflows.indices {
           let workflow = group.workflows[wOffset]
-          let viewModel = mapper.map(workflow)
+          let viewModel = mapper.map(workflow, groupId: group.id)
 
           if wOffset == 0 {
             firstViewModel = viewModel

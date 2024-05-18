@@ -22,11 +22,13 @@ struct ApplicationCommand: MetaDataProviding {
     public var id: String { return self.rawValue }
     public var displayValue: String {
       switch self {
-      case .open: return "Open"
-      case .close: return "Close"
+      case .open:  "Open"
+      case .close: "Close"
+      case .hide:  "Hide"
+      case .unhide: "Unhide"
       }
     }
-    case open, close
+    case open, close, hide, unhide
   }
 
   var application: Application
@@ -39,11 +41,18 @@ struct ApplicationCommand: MetaDataProviding {
        action: Action = .open,
        application: Application,
        modifiers: [Modifier] = [],
-       notification: Bool = false) {
-    self.meta = Command.MetaData(id: id, name: name,
-                                 isEnabled: true, notification: notification)
+       notification: Command.Notification? = nil) {
+    self.meta = Command.MetaData(id: id, name: name, isEnabled: true, notification: notification)
     self.application = application
     self.modifiers = Set(modifiers)
+    self.action = action
+  }
+
+  init(action: Action, application: Application,
+       meta: Command.MetaData, modifiers: [Modifier]) {
+    self.application = application
+    self.modifiers = Set(modifiers)
+    self.meta = meta
     self.action = action
   }
 
@@ -58,12 +67,21 @@ struct ApplicationCommand: MetaDataProviding {
       self.meta = try MetaDataMigrator.migrate(decoder)
     }
   }
+
+  func copy() -> ApplicationCommand {
+    ApplicationCommand(
+      action: self.action,
+      application: self.application,
+      meta: self.meta.copy(),
+      modifiers: Array(self.modifiers)
+    )
+  }
 }
 
 extension ApplicationCommand {
   static func empty() -> ApplicationCommand {
     ApplicationCommand(action: .open,
                        application: Application(bundleIdentifier: "", bundleName: "", path: ""),
-                       notification: false)
+                       notification: nil)
   }
 }

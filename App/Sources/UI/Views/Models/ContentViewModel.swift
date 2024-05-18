@@ -1,32 +1,55 @@
 import Bonzai
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct ContentViewModel: Identifiable, Hashable, Codable,
-                          Sendable, Transferable {
+                         Sendable, Transferable {
+  static var transferRepresentation: some TransferRepresentation {
+    CodableRepresentation(contentType: .workflow)
+  }
+
+  enum Execution: String, Hashable, Codable {
+    case concurrent
+    case serial
+  }
+
+  enum Trigger: Hashable, Codable {
+    case application(String)
+    case keyboard(String)
+    case snippet(String)
+  }
+
   let id: String
+  let groupId: String
   let groupName: String?
   let name: String
   let images: [ImageModel]
   let overlayImages: [ImageModel]
-  let binding: String?
+  let trigger: Trigger?
   let badge: Int
   let badgeOpacity: Double
   let isEnabled: Bool
+  let execution: Execution
 
-  internal init(id: String, groupName: String? = nil, name: String,
+  internal init(id: String, 
+                groupId: String,
+                groupName: String? = nil,
+                name: String,
                 images: [ContentViewModel.ImageModel],
                 overlayImages: [ContentViewModel.ImageModel],
-                binding: String? = nil, badge: Int,
+                trigger: Trigger? = nil,
+                execution: Execution = .concurrent,
+                badge: Int,
                 badgeOpacity: Double, isEnabled: Bool) {
     self.id = id
+    self.groupId = groupId
     self.groupName = groupName
     self.name = name
     self.images = images
     self.overlayImages = overlayImages
-    self.binding = binding
+    self.execution = execution
     self.badge = badge
     self.badgeOpacity = badgeOpacity
+    self.trigger = trigger
     self.isEnabled = isEnabled
   }
 
@@ -39,15 +62,5 @@ struct ContentViewModel: Identifiable, Hashable, Codable,
       case command(CommandViewModel.Kind)
       case icon(Icon)
     }
-  }
-
-  static var transferRepresentation: some TransferRepresentation {
-    CodableRepresentation(contentType: .workflow)
-  }
-}
-
-extension UTType {
-  static var workflow: UTType {
-    UTType(exportedAs: "com.zenangst.Keyboard-Cowboy.Workflow", conformingTo: .data)
   }
 }

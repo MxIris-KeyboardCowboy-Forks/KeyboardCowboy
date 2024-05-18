@@ -4,6 +4,7 @@ extension KeyboardCowboy {
   static let mainWindowIdentifier = "MainWindow"
   static let permissionsSettingsWindowIdentifier = "PermissionsSettingsWindow"
   static let permissionsWindowIdentifier = "PermissionsWindow"
+  static let releaseNotesWindowIdentifier = "ReleaseNotesWindow"
 
   static var bundleIdentifier: String { Bundle.main.bundleIdentifier! }
 
@@ -23,8 +24,10 @@ extension KeyboardCowboy {
       .first(where: { $0.identifier?.rawValue.contains(mainWindowIdentifier) == true })
   }
 
-  static func activate() {
-    Self.app.setActivationPolicy(.regular)
+  static func activate(setActivationPolicy: Bool = true) {
+    if setActivationPolicy {
+      Self.app.setActivationPolicy(.regular)
+    }
     Self.app.activate(ignoringOtherApps: true)
   }
 

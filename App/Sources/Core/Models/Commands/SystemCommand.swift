@@ -17,6 +17,10 @@ struct SystemCommand: MetaDataProviding {
       case .moveFocusToPreviousWindow:       "Move Focus to Previous Window"
       case .moveFocusToNextWindowFront:      "Move Focus to Next Window of Active Application"
       case .moveFocusToPreviousWindowFront:  "Move Focus to Previous Window of Active Application"
+      case .moveFocusToNextWindowUpwards:    "Move Focus to Window Upwards"
+      case .moveFocusToNextWindowOnLeft:     "Move Focus to Window on Left"
+      case .moveFocusToNextWindowOnRight:    "Move Focus to Window on Right"
+      case .moveFocusToNextWindowDownwards:  "Move Focus to Window Downwards"
       }
     }
 
@@ -27,6 +31,10 @@ struct SystemCommand: MetaDataProviding {
       case .minimizeAllOpenWindows:          "arrow.down.right.and.arrow.up.left"
       case .missionControl:                  "square.grid.3x3"
       case .showDesktop:                     "desktopcomputer"
+      case .moveFocusToNextWindowOnLeft:     "arrow.left.circle"
+      case .moveFocusToNextWindowOnRight:    "arrow.right.circle"
+      case .moveFocusToNextWindowUpwards:    "arrow.up.circle"
+      case .moveFocusToNextWindowDownwards:  "arrow.down.circle"
       case .moveFocusToNextWindowGlobal:     "arrow.right.circle"
       case .moveFocusToPreviousWindowGlobal: "arrow.left.circle"
       case .moveFocusToNextWindow:           "arrow.right.to.line.alt"
@@ -47,6 +55,10 @@ struct SystemCommand: MetaDataProviding {
       case .minimizeAllOpenWindows:                                      "/System/Applications/Mission Control.app/Contents/Resources/AppIcon.icns"
       case .missionControl:                                              "/System/Applications/Mission Control.app/Contents/Resources/AppIcon.icns"
       case .showDesktop:                                                 "/System/Library/CoreServices/Dock.app/Contents/Resources/Dock.icns"
+      case .moveFocusToNextWindowOnLeft:                                 "/System/Library/CoreServices/WidgetKit Simulator.app/Contents/Resources/AppIcon.icns"
+      case .moveFocusToNextWindowOnRight:                                "/System/Library/CoreServices/WidgetKit Simulator.app/Contents/Resources/AppIcon.icns"
+      case .moveFocusToNextWindowUpwards:                                "/System/Library/CoreServices/WidgetKit Simulator.app/Contents/Resources/AppIcon.icns"
+      case .moveFocusToNextWindowDownwards:                              "/System/Library/CoreServices/WidgetKit Simulator.app/Contents/Resources/AppIcon.icns"
       }
     }
 
@@ -54,6 +66,10 @@ struct SystemCommand: MetaDataProviding {
     case applicationWindows
     case minimizeAllOpenWindows
     case missionControl
+    case moveFocusToNextWindowOnLeft
+    case moveFocusToNextWindowOnRight
+    case moveFocusToNextWindowUpwards
+    case moveFocusToNextWindowDownwards
     case moveFocusToNextWindowFront
     case moveFocusToPreviousWindowFront
     case moveFocusToNextWindow
@@ -65,9 +81,15 @@ struct SystemCommand: MetaDataProviding {
   var kind: Kind
   var meta: Command.MetaData
 
-  init(id: String = UUID().uuidString, name: String, kind: Kind, notification: Bool) {
+  init(id: String = UUID().uuidString, name: String, kind: Kind, 
+       notification: Command.Notification? = nil) {
     self.kind = kind
     self.meta = Command.MetaData(id: id, name: name, isEnabled: true, notification: notification)
+  }
+
+  init(kind: Kind, meta: Command.MetaData) {
+    self.kind = kind
+    self.meta = meta
   }
 
   init(from decoder: Decoder) throws {
@@ -78,5 +100,9 @@ struct SystemCommand: MetaDataProviding {
     } catch {
       self.meta = try MetaDataMigrator.migrate(decoder)
     }
+  }
+
+  func copy() -> SystemCommand {
+    SystemCommand(kind: kind, meta: meta.copy())
   }
 }

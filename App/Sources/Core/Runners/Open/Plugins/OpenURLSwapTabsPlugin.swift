@@ -23,7 +23,9 @@ final class OpenURLSwapTabsPlugin {
   /// - Parameters:
   ///   - command: The open command to execute.
   /// - Throws: An error if the URL cannot be opened.
-  func execute(_ path: String, appName: String, appPath: String?, bundleIdentifier: String?) async throws {
+  func execute(_ path: String, appName: String, 
+               appPath: String?, bundleIdentifier: String?,
+               checkCancellation: Bool) async throws {
     // Get the bundle identifier of the target application, default to Safari if not provided
     let bundleIdentifier = bundleIdentifier ?? "com.apple.Safari"
 
@@ -77,10 +79,10 @@ final class OpenURLSwapTabsPlugin {
             end tell
             """
 
-        let scriptCommand = ScriptCommand(name: UUID().uuidString, kind: .appleScript, source: .inline(source), notification: false)
+        let scriptCommand = ScriptCommand(name: UUID().uuidString, kind: .appleScript, source: .inline(source), notification: nil)
 
         // Run the script command and check the result
-        if try await commandRunner.run(scriptCommand, environment: [:]) == "-1" {
+        if try await commandRunner.run(scriptCommand, environment: [:], checkCancellation: checkCancellation) == "-1" {
           throw OpenURLSwapToPluginError.couldNotFindOpenUrl
         }
       }

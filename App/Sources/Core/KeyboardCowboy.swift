@@ -37,6 +37,7 @@ struct KeyboardCowboy: App {
     let core = Core()
     contentStore = core.contentStore
     self.core = core
+    self.appDelegate.core = core
 
     Task {
       await MainActor.run {
@@ -61,6 +62,7 @@ struct KeyboardCowboy: App {
 
     PermissionsWindow()
     PermissionsScene(onAction: handlePermissionAction(_:))
+    ReleaseNotesScene()
 
     NewCommandWindow(contentStore: core.contentStore, 
                      uiElementCaptureStore: core.uiElementCaptureStore,
@@ -69,7 +71,7 @@ struct KeyboardCowboy: App {
       Task {
         await core.detailCoordinator.addOrUpdateCommand(payload, workflowId: workflowId,
                                                                title: title, commandId: commandId)
-        core.contentCoordinator.handle(.selectWorkflow(workflowIds: [workflowId], groupIds: groupIds))
+        core.contentCoordinator.handle(.selectWorkflow(workflowIds: [workflowId]))
         core.contentCoordinator.handle(.refresh(groupIds))
       }
     }
@@ -91,11 +93,19 @@ struct KeyboardCowboy: App {
           handleAppScene(.permissions)
           return
         }
+
+        if AppStorageContainer.shared.releaseNotes < KeyboardCowboy.marektingVersion {
+          openWindow(id: KeyboardCowboy.releaseNotesWindowIdentifier)
+        }
+
       }
     case .openMainWindow:
       handleAppScene(.mainWindow)
     case .reveal:
       NSWorkspace.shared.selectFile(Bundle.main.bundlePath, inFileViewerRootedAtPath: "")
+      NSWorkspace.shared.runningApplications
+        .first(where: { $0.bundleIdentifier?.lowercased().contains("apple.finder") == true })?
+        .activate()
     }
   }
 
@@ -111,6 +121,7 @@ struct KeyboardCowboy: App {
       } else {
         openWindow(id: KeyboardCowboy.mainWindowIdentifier)
       }
+      KeyboardCowboy.activate()
     case .addGroup:
       openWindow(value: EditWorkflowGroupWindow.Context.add(WorkflowGroup.empty()))
     case .editGroup(let groupId):
@@ -119,6 +130,8 @@ struct KeyboardCowboy: App {
       } else {
         assertionFailure("Unable to find workflow group")
       }
+    case .addCommand(let workflowId):
+      openWindow(value: NewCommandWindow.Context.newCommand(workflowId: workflowId))
     }
   }
 
@@ -131,5 +144,11 @@ struct KeyboardCowboy: App {
       openWindow(id: KeyboardCowboy.permissionsSettingsWindowIdentifier)
       AccessibilityPermission.shared.requestPermission()
     }
+  }
+}
+
+private extension String {
+  static func < (lhs: String, rhs: String) -> Bool {
+    return lhs.compare(rhs, options: .numeric) == .orderedAscending
   }
 }

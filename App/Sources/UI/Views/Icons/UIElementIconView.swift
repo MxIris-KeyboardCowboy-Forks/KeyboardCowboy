@@ -3,119 +3,125 @@ import SwiftUI
 
 struct UIElementIconView: View {
   let size: CGFloat
-  @Binding var stacked: Bool
 
-  @ObserveInjection var inject
   var body: some View {
     Rectangle()
       .fill(Color(.systemBlue))
-      .overlay {
-        Rectangle()
-          .fill(
-            LinearGradient(
-              gradient: Gradient(stops: [
-                .init(color: Color(.systemRed).opacity(0.75), location: 0.0),
-                .init(color: .clear, location: 0.75),
-              ]),
-              startPoint: .topTrailing,
-              endPoint: .bottomLeading
-            )
-          )
-
-        Rectangle()
-          .fill(
-            LinearGradient(
-              gradient: Gradient(stops: [
-                .init(color: Color(.systemGreen), location: 0.0),
-                .init(color: .clear, location: 0.5),
-              ]),
-              startPoint: .topLeading,
-              endPoint: .bottomTrailing
-            )
-          )
-
-        Rectangle()
-          .fill(
-            LinearGradient(
-              gradient: Gradient(stops: [
-                .init(color: Color(.systemYellow).opacity(0.75), location: 0.0),
-                .init(color: .clear, location: 0.4),
-              ]),
-              startPoint: .top,
-              endPoint: .bottom
-            )
-          )
-
-        Rectangle()
-          .fill(
-            LinearGradient(
-              gradient: Gradient(stops: [
-                .init(color: Color(.systemPink).opacity(0.4), location: 0.0),
-                .init(color: .clear, location: 1.0),
-              ]),
-              startPoint: .trailing,
-              endPoint: .leading
-            )
-          )
-      }
-      .overlay {
-        Image(systemName: "viewfinder")
-          .resizable()
-          .aspectRatio(contentMode: .fit)
-          .opacity(0.3)
-          .padding(2)
-          .shadow(radius: 1)
-          .mask(alignment: .center, {
-            LinearGradient(stops: [
-              .init(color: .black.opacity(0.5), location: 0.2),
-              .init(color: .black.opacity(0.8), location: 0.75)
-            ], startPoint: .topLeading, endPoint: .bottomTrailing)
-          })
-
-      }
-      .overlay {
-        Image(systemName: "ellipsis.rectangle.fill")
-          .resizable()
-          .aspectRatio(contentMode: .fit)
-          .padding(6)
-          .shadow(radius: 1)
-          .mask(alignment: .center, {
-            LinearGradient(stops: [
-              .init(color: .black, location: 0.0),
-              .init(color: .clear, location: 1.0)
-            ], startPoint: .topLeading, endPoint: .bottomTrailing)
-
-          })
-          .opacity(0.5)
+      .overlay { UIElementIconGradientView(size) }
+      .overlay { iconOverlay() }
+      .overlay { iconBorder(size) }
+      .overlay(alignment: .center) {
+        UIElementIconViewFinderView(size)
+        UIElementIconEllipsisView(size)
       }
     .compositingGroup()
-    .clipShape(RoundedRectangle(cornerRadius: 4))
     .frame(width: size, height: size)
     .fixedSize()
-    .stacked($stacked, color: Color(.systemPurple), size: size)
-    .enableInjection()
+    .drawingGroup(opaque: true)
+    .iconShape(size)
+  }
+}
+
+private struct UIElementIconGradientView: View {
+  private let size: CGFloat
+
+  init(_ size: CGFloat) {
+    self.size = size
   }
 
-  func mask() -> LinearGradient {
-    LinearGradient(stops: [
-      .init(color: .black, location: 0.0),
-      .init(color: .clear, location: 1.0)
-    ], startPoint: .topLeading, endPoint: .bottomTrailing)
+  var body: some View {
+    LinearGradient(
+      gradient: Gradient(stops: [
+        .init(color: Color(.systemRed).opacity(0.75), location: 0.0),
+        .init(color: .clear, location: 0.75),
+      ]),
+      startPoint: .topTrailing,
+      endPoint: .bottomLeading
+    )
+
+    LinearGradient(
+      gradient: Gradient(stops: [
+        .init(color: Color(.systemGreen), location: 0.0),
+        .init(color: .clear, location: 0.5),
+      ]),
+      startPoint: .topLeading,
+      endPoint: .bottomTrailing
+    )
+
+    LinearGradient(
+      gradient: Gradient(stops: [
+        .init(color: Color(.systemYellow).opacity(0.75), location: 0.0),
+        .init(color: .clear, location: 0.4),
+      ]),
+      startPoint: .top,
+      endPoint: .bottom
+    )
+
+    LinearGradient(
+      gradient: Gradient(stops: [
+        .init(color: Color(.systemPink).opacity(0.4), location: 0.0),
+        .init(color: .clear, location: 1.0),
+      ]),
+      startPoint: .trailing,
+      endPoint: .leading
+    )
+  }
+}
+
+private struct UIElementIconEllipsisView: View {
+  private let size: CGFloat
+
+  init(_ size: CGFloat) {
+    self.size = size
+  }
+
+  var body: some View {
+    Image(systemName: "ellipsis.rectangle.fill")
+      .resizable()
+      .aspectRatio(contentMode: .fit)
+      .foregroundStyle(
+        .black.opacity(0.4),
+        LinearGradient(stops: [
+          .init(color: Color(nsColor: .systemYellow.withSystemEffect(.deepPressed)), location: 0.0),
+          .init(color: Color(.systemYellow), location: 0.3),
+          .init(color: Color(.systemOrange), location: 0.6),
+          .init(color: Color(.systemRed), location: 1.0),
+        ], startPoint: .top, endPoint: .bottomTrailing))
+      .shadow(radius: 5)
+      .frame(width: size * 0.64, height: size * 0.64)
+      .offset(x: size * 0.0125)
+  }
+}
+
+private struct UIElementIconViewFinderView: View {
+  private let size: CGFloat
+
+  init(_ size: CGFloat) {
+    self.size = size
+  }
+
+  var body: some View {
+    Image(systemName: "viewfinder")
+      .resizable()
+      .aspectRatio(contentMode: .fit)
+      .fontWeight(.light)
+      .opacity(0.3)
+      .shadow(radius: 10)
+      .frame(width: size * 0.9, height: size * 0.9)
+      .offset(x: size * 0.0125)
   }
 }
 
 #Preview {
-  VStack {
-    HStack {
-      UIElementIconView(size: 128, stacked: .constant(false))
-     UIElementIconView(size: 64, stacked: .constant(false))
-     UIElementIconView(size: 32, stacked: .constant(false))
-    }
-
-    HStack {
-      UIElementIconView(size: 128, stacked: .constant(true))
-      UIElementIconView(size: 64, stacked: .constant(true))
-      UIElementIconView(size: 32, stacked: .constant(true))
+  HStack(alignment: .top, spacing: 8) {
+    UIElementIconView(size: 192)
+    VStack(alignment: .leading, spacing: 8) {
+      UIElementIconView(size: 128)
+      HStack(alignment: .top, spacing: 8) {
+        UIElementIconView(size: 64)
+        UIElementIconView(size: 32)
+        UIElementIconView(size: 16)
+      }
     }
   }
   .padding()

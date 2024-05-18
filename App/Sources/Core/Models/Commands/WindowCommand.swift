@@ -76,13 +76,13 @@ struct WindowCommand: MetaDataProviding {
 
     var symbol: String {
       switch self {
-      case .center: return "arrow.down.right.and.arrow.up.left"
-      case .fullscreen: return "arrow.up.left.and.arrow.down.right"
-      case .move: return "arrow.up.and.down.and.arrow.left.and.right"
-      case .decreaseSize: return "minus.magnifyingglass"
-      case .increaseSize: return "plus.magnifyingglass"
-      case .moveToNextDisplay: return "rectangle.on.rectangle"
-      case .anchor: return "pin"
+      case .center: "arrow.down.right.and.arrow.up.left"
+      case .fullscreen: "arrow.up.left.and.arrow.down.right"
+      case .move: "arrow.up.and.down.and.arrow.left.and.right"
+      case .decreaseSize: "minus.magnifyingglass"
+      case .increaseSize: "plus.magnifyingglass"
+      case .moveToNextDisplay: "rectangle.on.rectangle"
+      case .anchor: "pin"
       }
     }
 
@@ -186,9 +186,17 @@ struct WindowCommand: MetaDataProviding {
   }
 
   init(id: String = UUID().uuidString, name: String, 
-       kind: Kind, notification: Bool, animationDuration: Double) {
+       kind: Kind, 
+       notification: Command.Notification? = nil,
+       animationDuration: Double) {
     self.kind = kind
     self.meta = Command.MetaData(id: id, name: name, isEnabled: true, notification: notification)
+    self.animationDuration = animationDuration
+  }
+
+  init(kind: Kind, meta: Command.MetaData, animationDuration: Double) {
+    self.kind = kind
+    self.meta = meta
     self.animationDuration = animationDuration
   }
 
@@ -198,5 +206,9 @@ struct WindowCommand: MetaDataProviding {
     self.kind = try container.decode(Kind.self, forKey: .kind)
     self.animationDuration = try container.decodeIfPresent(Double.self, forKey: .animationDuration) ?? 0
     self.meta = try container.decode(Command.MetaData.self, forKey: .meta)
+  }
+
+  func copy() -> WindowCommand {
+    WindowCommand(kind: self.kind, meta: self.meta.copy(), animationDuration: self.animationDuration)
   }
 }

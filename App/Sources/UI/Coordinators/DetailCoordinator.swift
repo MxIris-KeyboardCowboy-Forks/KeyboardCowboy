@@ -86,12 +86,15 @@ final class DetailCoordinator {
     }
   }
 
-  func handle(_ action: ContentListView.Action) {
+  func handle(_ action: ContentView.Action) {
     switch action {
     case .refresh, .moveWorkflowsToGroup, .reorderWorkflows, .duplicate:
       return
-    case .selectWorkflow(let workflowIds, let groupIds):
-      render(workflowIds, groupIds: groupIds)
+    case .moveCommandsToWorkflow(_, let workflowId, _):
+      guard let groupId = groupSelectionManager.selections.first else { return }
+      render([workflowId], groupIds: [groupId])
+    case .selectWorkflow(let workflowIds):
+      render(workflowIds, groupIds: groupSelectionManager.selections)
     case .removeWorkflows:
       guard let first = groupSelectionManager.selections.first,
             let group = groupStore.group(withId: first) else {
@@ -117,12 +120,12 @@ final class DetailCoordinator {
       return
     case .builtIn(let newCommand):
       command = .builtIn(newCommand)
-    case .menuBar(let tokens):
-      command = .menuBar(.init(id: resolvedCommandId, tokens: tokens))
+    case .menuBar(let tokens, let application):
+      command = .menuBar(.init(id: resolvedCommandId, application: application, tokens: tokens))
     case .mouse(let kind):
       command = .mouse(.init(meta: .init(), kind: kind))
     case .keyboardShortcut(let keyShortcuts):
-      command = .keyboard(.init(keyboardShortcuts: keyShortcuts, notification: false))
+      command = .keyboard(.init(id: resolvedCommandId, name: "", keyboardShortcuts: keyShortcuts, notification: nil))
     case .script(let value, let kind, let scriptExtension):
       let source: ScriptCommand.Source
       switch kind {
@@ -134,9 +137,9 @@ final class DetailCoordinator {
 
       switch scriptExtension {
       case .appleScript:
-        command = .script(.init(name: title, kind: .appleScript, source: source, notification: false))
+        command = .script(.init(name: title, kind: .appleScript, source: source, notification: nil))
       case .shellScript:
-        command = .script(.init(name: title, kind: .shellScript, source: source, notification: false))
+        command = .script(.init(name: title, kind: .shellScript, source: source, notification: nil))
       }
     case .text(let textCommand):
       switch textCommand.kind {
@@ -145,7 +148,7 @@ final class DetailCoordinator {
       }
     case .shortcut(let name):
       command = .shortcut(.init(id: resolvedCommandId, shortcutIdentifier: name,
-                                name: name, isEnabled: true, notification: false))
+                                name: name, isEnabled: true, notification: nil))
     case .application(let application, let action,
                       let inBackground, let hideWhenRunning, let ifNotRunning):
       assert(application != nil)
@@ -158,12 +161,11 @@ final class DetailCoordinator {
       if hideWhenRunning { modifiers.append(.hidden) }
       if ifNotRunning { modifiers.append(.onlyIfNotRunning) }
 
-      let commandAction: ApplicationCommand.Action
-      switch action {
-      case .close:
-        commandAction = .close
-      case .open:
-        commandAction = .open
+      let commandAction: ApplicationCommand.Action = switch action {
+      case .close:  .close
+      case .open:   .open
+      case .hide:   .hide
+      case .unhide: .unhide
       }
 
       command = Command.application(.init(id: resolvedCommandId,
@@ -171,29 +173,29 @@ final class DetailCoordinator {
                                           action: commandAction,
                                           application: application,
                                           modifiers: modifiers,
-                                          notification: false))
+                                          notification: nil))
     case .open(let path, let application):
       let resolvedPath = (path as NSString).expandingTildeInPath
       command = Command.open(.init(id: resolvedCommandId,
                                    name: "\(path)", application: application, path: resolvedPath,
-                                   notification: false))
+                                   notification: nil))
     case .url(let targetUrl, let application):
       let urlString = targetUrl.absoluteString
       command = Command.open(.init(id: resolvedCommandId,
                                    name: "\(urlString)", application: application, path: urlString,
-                                   notification: false))
+                                   notification: nil))
     case .systemCommand(let kind):
       command = Command.systemCommand(.init(id: UUID().uuidString,
                                             name: "System command",
                                             kind: kind,
-                                            notification: false))
+                                            notification: nil))
     case .uiElement(let predicates):
       command = Command.uiElement(.init(predicates: predicates))
     case .windowManagement(let kind):
       command = Command.windowManagement(.init(id: UUID().uuidString,
                                                name: "Window Management Command",
                                                kind: kind,
-                                               notification: false,
+                                               notification: nil,
                                                animationDuration: 0))
     }
 
@@ -249,8 +251,9 @@ final class DetailCoordinator {
     let workflows = groupStore.groups
       .filter { groupIds.contains($0.id) }
       .flatMap(\.workflows)
+    let matches = workflows
       .filter { ids.contains($0.id) }
-    let viewModels: [DetailViewModel] = mapper.map(workflows)
+    let viewModels: [DetailViewModel] = mapper.map(matches)
     let state: DetailViewState
 
     if viewModels.count > 1 {
@@ -360,7 +363,8 @@ extension SingleDetailView.Action {
          .updateExecution(let workflowId, _),
          .runWorkflow(let workflowId),
          .togglePassthrough(let workflowId, _),
-         .updateHoldDuration(let workflowId, _):
+         .updateHoldDuration(let workflowId, _),
+         .updateSnippet(let workflowId, _):
       return workflowId
     }
   }

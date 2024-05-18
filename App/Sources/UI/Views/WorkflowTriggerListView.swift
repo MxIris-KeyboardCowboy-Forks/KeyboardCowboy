@@ -1,8 +1,10 @@
 import Bonzai
 import Combine
+import Inject
 import SwiftUI
 
 struct WorkflowTriggerListView: View {
+  @ObserveInjection var inject
   @Namespace private var namespace
   @ObservedObject private var publisher: TriggerPublisher
   private let applicationTriggerSelectionManager: SelectionManager<DetailViewModel.ApplicationTrigger>
@@ -32,7 +34,9 @@ struct WorkflowTriggerListView: View {
     Group {
       switch publisher.data {
       case .keyboardShortcuts(let trigger):
-        KeyboardTriggerView(
+        WorkflowTriggerHeaderView("Keyboard Shortcuts Sequence") { onAction(.removeTrigger(workflowId: workflowId)) }
+          .matchedGeometryEffect(id: "workflow-trigger-header", in: namespace)
+        WorkflowKeyboardTriggerView(
           namespace: namespace,
           workflowId: workflowId,
           focus: focus,
@@ -41,28 +45,24 @@ struct WorkflowTriggerListView: View {
           onAction: onAction
         )
       case .applications(let triggers):
-        HStack {
-          ZenLabel("Application Trigger")
-          Spacer()
-          Button(action: { onAction(.removeTrigger(workflowId: workflowId)) },
-                 label: {
-            Image(systemName: "xmark")
-              .resizable()
-              .aspectRatio(contentMode: .fit)
-              .frame(width: 10, height: 10)
-          })
-          .buttonStyle(.calm(color: .systemRed, padding: .medium))
-        }
-        .padding([.leading, .trailing], 8)
+        WorkflowTriggerHeaderView("Application Trigger") { onAction(.removeTrigger(workflowId: workflowId)) }
+          .matchedGeometryEffect(id: "workflow-trigger-header", in: namespace)
         WorkflowApplicationTriggerView(focus, data: triggers,
                                        selectionManager: applicationTriggerSelectionManager,
-        onTab: onTab) { action in
+                                       onTab: onTab) { action in
           onAction(.applicationTrigger(workflowId: workflowId, action: action))
         }
         .matchedGeometryEffect(id: "workflow-triggers", in: namespace)
+      case .snippet(let snippet):
+        WorkflowTriggerHeaderView("Add Snippet") { onAction(.removeTrigger(workflowId: workflowId)) }
+          .matchedGeometryEffect(id: "workflow-trigger-header", in: namespace)
+        WorkflowSnippetTriggerView(focus, snippet: snippet) { snippet in
+          onAction(.updateSnippet(workflowId: workflowId, snippet: snippet))
+        }
+        .matchedGeometryEffect(id: "workflow-triggers", in: namespace)
       case .empty:
-        ZenLabel("Add Trigger")
-          .padding([.leading, .trailing], 8)
+        WorkflowTriggerHeaderView("Add Trigger", onRemove: nil)
+          .matchedGeometryEffect(id: "workflow-trigger-header", in: namespace)
         WorkflowTriggerView(focus, isGrayscale: .readonly(publisher.data != .empty),
                             onAction: { action in
           onAction(.trigger(workflowId: workflowId, action: action))
@@ -71,6 +71,34 @@ struct WorkflowTriggerListView: View {
       }
     }
     .animation(.spring(response: 0.3, dampingFraction: 0.65, blendDuration: 0.2), value: publisher.data)
+    .enableInjection()
+  }
+}
+
+private struct WorkflowTriggerHeaderView: View {
+  let text: String
+  let onRemove: (() -> Void)?
+
+  init(_ text: String, onRemove: (() -> Void)? = nil) {
+    self.text = text
+    self.onRemove = onRemove
+  }
+
+  var body: some View {
+    HStack {
+      ZenLabel(text)
+      Spacer()
+      Button(action: { onRemove?() },
+             label: {
+        Image(systemName: "xmark")
+          .resizable()
+          .aspectRatio(contentMode: .fit)
+          .frame(width: 10, height: 10)
+      })
+      .buttonStyle(.calm(color: .systemRed, padding: .medium))
+      .opacity(onRemove != nil ? 1 : 0)
+    }
+    .padding([.leading, .trailing], 8)
   }
 }
 

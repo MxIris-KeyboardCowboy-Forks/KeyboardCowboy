@@ -16,7 +16,7 @@ final class ContentViewActionReducerTests: XCTestCase {
     XCTAssertEqual(subject.original, subject.copy)
 
     // Nothing should happen because `.selectWorkflow` is no-op.
-    ContentViewActionReducer.reduce(.selectWorkflow(workflowIds: [], groupIds: []), groupStore: ctx.store,
+    ContentViewActionReducer.reduce(.selectWorkflow(workflowIds: []), groupStore: ctx.store,
                                     selectionManager: ctx.selector,
                                     group: &subject.original)
 
@@ -31,7 +31,7 @@ final class ContentViewActionReducerTests: XCTestCase {
       ]),
       .init(id: "group-2-id", name: "group-2-name", workflows: [])
     ])
-    let action: ContentListView.Action = .moveWorkflowsToGroup("group-2-id",
+    let action: ContentView.Action = .moveWorkflowsToGroup("group-2-id",
                                                            workflows: ["workflow-1-id", "workflow-2-id"])
     var subject = ctx.store.groups[0]
 
@@ -54,7 +54,7 @@ final class ContentViewActionReducerTests: XCTestCase {
       ]),
       .init(id: "group-2-id", name: "group-2-name", workflows: [])
     ])
-    let action: ContentListView.Action = .addWorkflow(workflowId: "workflow-3-id")
+    let action: ContentView.Action = .addWorkflow(workflowId: "workflow-3-id")
     var subject = ctx.store.groups[0]
 
     XCTAssertEqual(subject.workflows[0].id, "workflow-1-id")
@@ -113,7 +113,7 @@ final class ContentViewActionReducerTests: XCTestCase {
 
     var indexSet = IndexSet()
     indexSet.insert(2)
-    let action: ContentListView.Action = .reorderWorkflows(source: indexSet, destination: 0)
+    let action: ContentView.Action = .reorderWorkflows(source: indexSet, destination: 0)
     var subject = ctx.store.groups[0]
 
     ContentViewActionReducer.reduce(action, groupStore: ctx.store,

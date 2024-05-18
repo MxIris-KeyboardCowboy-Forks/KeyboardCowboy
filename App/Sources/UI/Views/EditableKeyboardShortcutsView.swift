@@ -18,9 +18,20 @@ extension AnyTransition {
 
 
 struct EditableKeyboardShortcutsView<T: Hashable>: View {
-  @ObserveInjection var inject
   enum CurrentState: Hashable {
     case recording
+  }
+
+  enum Mode {
+    case inlineEdit
+    case externalEdit(_ then: () -> Void)
+
+    var features: Set<EditableKeyboardShortcutsItemView.Feature> {
+      switch self {
+      case .inlineEdit: [.remove, .record]
+      case .externalEdit: []
+      }
+    }
   }
 
   private var focus: FocusState<T?>.Binding
@@ -32,23 +43,32 @@ struct EditableKeyboardShortcutsView<T: Hashable>: View {
   @State private var replacing: KeyShortcut.ID?
   @State private var selectedColor: Color = .accentColor
   private let animation: Animation = .easeOut(duration: 0.2)
+  private let recordOnAppearIfEmpty: Bool
+  private let draggableEnabled: Bool
   private let focusBinding: (KeyShortcut.ID) -> T
+  private let mode: Mode
   private let onTab: (Bool) -> Void
   private let placeholderId = "keyboard_shortcut_placeholder_id"
   private let selectionManager: SelectionManager<KeyShortcut>
 
   init(_ focus: FocusState<T?>.Binding,
        focusBinding: @escaping (KeyShortcut.ID) -> T,
+       mode: Mode,
        keyboardShortcuts: Binding<[KeyShortcut]>,
+       draggableEnabled: Bool,
        state: CurrentState? = nil,
        selectionManager: SelectionManager<KeyShortcut>,
+       recordOnAppearIfEmpty: Bool = false,
        onTab: @escaping (Bool) -> Void) {
     self.focus = focus
+    self.mode = mode
+    self.draggableEnabled = draggableEnabled
     _keyboardShortcuts = keyboardShortcuts
     _state = .init(initialValue: state)
     self.focusBinding = focusBinding
     self.onTab = onTab
     self.selectionManager = selectionManager
+    self.recordOnAppearIfEmpty = recordOnAppearIfEmpty
   }
 
   var body: some View {
@@ -60,6 +80,7 @@ struct EditableKeyboardShortcutsView<T: Hashable>: View {
               EditableKeyboardShortcutsItemView(
                 keyboardShortcut: keyboardShortcut,
                 keyboardShortcuts: $keyboardShortcuts,
+                features: mode.features,
                 selectionManager: selectionManager,
                 onDelete: { keyboardShortcut in
                   guard let index = keyboardShortcuts.firstIndex(of: keyboardShortcut) else { return }
@@ -69,27 +90,48 @@ struct EditableKeyboardShortcutsView<T: Hashable>: View {
                   }
                 }
               )
+              .modifier(DraggableToggle(isEnabled: draggableEnabled, model: keyboardShortcut.wrappedValue))
               .padding(.leading, 2)
               .padding(.trailing, 4)
               .contentShape(Rectangle())
+              .dropDestination(KeyShortcut.self, alignment: .horizontal, color: .accentColor, onDrop: { items, location in
+                let ids: [KeyShortcut.ID] = if selectionManager.selections.isEmpty {
+                  items.map(\.id)
+                } else {
+                  Array(selectionManager.selections)
+                }
+
+                guard let (from, destination) = keyboardShortcuts.moveOffsets(for: keyboardShortcut.wrappedValue, with: ids) else {
+                  return false
+                }
+
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.65, blendDuration: 0.2)) {
+                  keyboardShortcuts.move(fromOffsets: IndexSet(from), toOffset: destination)
+                }
+
+                return true
+              })
               .contextMenu {
-                Text(keyboardShortcut.wrappedValue.validationValue)
-                Divider()
-                Button("Change Keyboard Shortcut") { rerecord(keyboardShortcut.id) }
-                Button("Remove") {
-                  if let index = keyboardShortcuts.firstIndex(where: { $0.id == keyboardShortcut.id }) {
-                    _ = withAnimation(animation) {
-                      keyboardShortcuts.remove(at: index)
+                Group {
+                  Text(keyboardShortcut.wrappedValue.validationValue)
+                  Divider()
+                  Button("Change Keyboard Shortcut") { handleEdit(keyboardShortcut.id) }
+                  Button("Remove") {
+                    if let index = keyboardShortcuts.firstIndex(where: { $0.id == keyboardShortcut.id }) {
+                      _ = withAnimation(animation) {
+                        keyboardShortcuts.remove(at: index)
+                      }
                     }
                   }
                 }
+                .opacity(mode.features.contains(.record) ? 1 : 0)
               }
               .focusable(focus, as: focusBinding(keyboardShortcut.wrappedValue.id), onFocus: {
                 selectionManager.handleOnTap(keyboardShortcuts, element: keyboardShortcut.wrappedValue)
               })
               .simultaneousGesture(
                 TapGesture(count: 2)
-                  .onEnded { _ in rerecord(keyboardShortcut.id) }
+                  .onEnded { _ in handleEdit(keyboardShortcut.id) }
               )
               .id(keyboardShortcut.id)
             }
@@ -146,9 +188,14 @@ struct EditableKeyboardShortcutsView<T: Hashable>: View {
         .buttonStyle(.calm(color: .systemRed, padding: .large))
         .opacity(!keyboardShortcuts.isEmpty ? 1 : 0)
         .padding(.trailing, 4)
+        .opacity(mode.features.contains(.record) ? 1 : 0)
       }
       .overlay(overlay(proxy))
-      .enableInjection()
+      .onAppear {
+        guard recordOnAppearIfEmpty, keyboardShortcuts.isEmpty else { return }
+
+        addButtonAction(proxy)
+      }
     }
     .onChange(of: controlActiveState, perform: { value in
       if value != .key {
@@ -175,14 +222,19 @@ struct EditableKeyboardShortcutsView<T: Hashable>: View {
     })
   }
 
-  private func rerecord(_ id: KeyShortcut.ID) {
-    replacing = id
-    record()
+  private func handleEdit(_ id: KeyShortcut.ID) {
+    switch mode {
+    case .externalEdit(let then):
+      then()
+    case .inlineEdit:
+      replacing = id
+      record()
+    }
   }
 
   @ViewBuilder
   private func overlay(_ proxy: ScrollViewProxy) -> some View {
-    if state == .recording {
+    ZStack {
       RoundedRectangle(cornerRadius: 7)
         .stroke(isGlowing
                 ? Color(.systemRed) .opacity(0.5)
@@ -191,7 +243,8 @@ struct EditableKeyboardShortcutsView<T: Hashable>: View {
         .animation(Animation
           .easeInOut(duration: 1.25)
           .repeatForever(autoreverses: true), value: isGlowing)
-    } else if keyboardShortcuts.isEmpty {
+        .opacity(state == .recording ? 1 : 0)
+
       Button(action: {
         addButtonAction(proxy)
       }, label: {
@@ -216,12 +269,13 @@ struct EditableKeyboardShortcutsView<T: Hashable>: View {
       .buttonStyle(.positive)
       .fixedSize(horizontal: false, vertical: true)
       .padding(4)
+      .opacity(keyboardShortcuts.isEmpty ? 1 : 0)
     }
   }
 
   private func addButtonAction(_ proxy: ScrollViewProxy) {
     let keyShortcut = KeyShortcut(id: placeholderId, key: "Recording ...", lhs: true)
-    selectionManager.selections = [keyShortcut.id]
+    selectionManager.publish([keyShortcut.id])
     state = .recording
     recorderStore.mode = .recordKeystroke
     replacing = keyShortcut.id
@@ -230,6 +284,7 @@ struct EditableKeyboardShortcutsView<T: Hashable>: View {
       isGlowing = true
       selectedColor = Color(.systemRed)
     }
+
     DispatchQueue.main.async {
       withAnimation(animation) {
         proxy.scrollTo(keyShortcut.id)
@@ -258,13 +313,30 @@ struct EditableKeyboardShortcutsView<T: Hashable>: View {
   }
 }
 
+private struct DraggableToggle<T: Transferable>: ViewModifier {
+  let isEnabled: Bool
+  let model: T
+
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    if isEnabled {
+      content
+        .draggable(model)
+    } else {
+      content
+    }
+  }
+}
+
 struct EditableKeyboardShortcutsView_Previews: PreviewProvider {
   @FocusState static var focus: AppFocus?
   static var previews: some View {
     EditableKeyboardShortcutsView(
       $focus,
       focusBinding: { .detail(.keyboardShortcut($0)) },
+      mode: .inlineEdit,
       keyboardShortcuts: .constant([ ]),
+      draggableEnabled: false,
       state: .recording,
       selectionManager: SelectionManager<KeyShortcut>.init(),
       onTab: { _ in })

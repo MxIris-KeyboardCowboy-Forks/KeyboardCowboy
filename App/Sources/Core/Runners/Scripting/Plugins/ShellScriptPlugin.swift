@@ -5,6 +5,7 @@ import Foundation
 final class ShellScriptPlugin: @unchecked Sendable {
   enum ShellScriptPluginError: Error {
     case noData
+    case scriptError(String)
   }
   let fileManager: FileManager
 
@@ -12,28 +13,49 @@ final class ShellScriptPlugin: @unchecked Sendable {
     self.fileManager = fileManager
   }
 
-  func executeScript(_ source: String, environment: [String: String]) throws -> String? {
+  func executeScript(_ source: String, environment: [String: String], checkCancellation: Bool) throws -> String? {
     let url = try createTmpDirectory()
     let data = source.data(using: .utf8)
     _ = fileManager.createFile(atPath: url.path, contents: data, attributes: nil)
-    let output = try executeScript(at: url.path, environment: environment)
+    let output = try executeScript(at: url.path, environment: environment,
+                                   checkCancellation: checkCancellation)
 
     try fileManager.removeItem(atPath: url.path)
 
     return output
   }
 
-  func executeScript(at path: String, environment: [String: String]) throws -> String? {
+  func executeScript(at path: String, environment: [String: String],
+                     checkCancellation: Bool) throws -> String? {
     let filePath = path.sanitizedPath
     let command = (filePath as NSString).lastPathComponent
     let url = URL(fileURLWithPath: (filePath as NSString).deletingLastPathComponent)
-    let (process, pipe, errorPipe) = createProcess()
+
+    var shell: String = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+    if let data = FileManager.default.contents(atPath: path),
+       let contents = String(data: data, encoding: .utf8) {
+      let lines = contents.split(separator: "\n")
+      if lines.count > 1 {
+        let firstLine = lines[0]
+
+        let shebang = "#!"
+        if firstLine.contains(shebang) {
+          let resolvedShell = firstLine
+            .split(separator: shebang)
+          if resolvedShell.count == 1 {
+            shell = String(resolvedShell[0])
+          }
+        }
+      }
+    }
+
+    let (process, pipe, errorPipe) = createProcess(shell: shell)
 
     process.arguments = ["-i", "-l", command]
     process.environment = environment
     process.currentDirectoryURL = url
 
-    try Task.checkCancellation()
+    if checkCancellation { try Task.checkCancellation() }
 
     try process.run()
 
@@ -43,6 +65,7 @@ final class ShellScriptPlugin: @unchecked Sendable {
       output = String(data: data, encoding: .utf8) ?? ""
     } else if let errorPipe = try errorPipe.fileHandleForReading.readToEnd() {
       output = String(data: errorPipe, encoding: .utf8) ?? ""
+      throw ShellScriptPluginError.scriptError(output)
     } else {
       output = ""
     }
@@ -67,11 +90,10 @@ final class ShellScriptPlugin: @unchecked Sendable {
     return url
   }
 
-  private func createProcess() -> (Process, Pipe, Pipe) {
+  private func createProcess(shell: String) -> (Process, Pipe, Pipe) {
     let outputPipe = Pipe()
     let errorPipe = Pipe()
     let process = Process()
-    let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
 
     process.executableURL = URL(filePath: shell)
     process.standardOutput = outputPipe

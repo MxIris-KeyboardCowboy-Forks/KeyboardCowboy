@@ -39,7 +39,7 @@ struct NewCommandURLView: View {
                label: { Image(systemName: "questionmark.circle.fill") })
         .buttonStyle(.calm(color: .systemYellow, padding: .small))
       }
-      HStack(spacing: 0) {
+      HStack(spacing: 8) {
         TextField("protocol", text: $stringProtocol)
           .frame(maxWidth: 120)
           .fixedSize(horizontal: true, vertical: false)
@@ -63,6 +63,7 @@ struct NewCommandURLView: View {
           .focused($focus, equals: .address)
           .padding(-2)
       }
+      .background(Color(nsColor: .windowBackgroundColor))
       .onChange(of: address, perform: { newValue in
         if let components = URLComponents(string: newValue),
            let host = components.host,

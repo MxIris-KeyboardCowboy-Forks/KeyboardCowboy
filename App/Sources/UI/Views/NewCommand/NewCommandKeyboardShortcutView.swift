@@ -15,13 +15,20 @@ struct NewCommandKeyboardShortcutView: View {
   @EnvironmentObject var recorderStore: KeyShortcutRecorderStore
   @FocusState private var focus: Focus?
   @State private var isGlowing: Bool = false
-  @State private var keyboardShortcuts = [KeyShortcut]()
+  @State private var keyboardShortcuts: [KeyShortcut]
   @State private var state: CurrentState? = nil
   private let wikiUrl = URL(string: "https://github.com/zenangst/KeyboardCowboy/wiki/Commands#keyboard-shortcuts-commands")!
+  private let selectionManager: SelectionManager<KeyShortcut> = .init()
 
   init(_ payload: Binding<NewCommandPayload>, validation: Binding<NewCommandValidation>) {
     _payload = payload
     _validation = validation
+
+    if case .keyboardShortcut(let shortcuts) = payload.wrappedValue {
+      _keyboardShortcuts = .init(initialValue: shortcuts)
+    } else {
+      _keyboardShortcuts = .init(initialValue: [])
+    }
   }
 
   var body: some View {
@@ -33,15 +40,23 @@ struct NewCommandKeyboardShortcutView: View {
                label: { Image(systemName: "questionmark.circle.fill") })
         .buttonStyle(.calm(color: .systemYellow, padding: .small))
       }
-
-      EditableKeyboardShortcutsView<Focus>(
-        $focus,
-        focusBinding: { .keyboardShortcut($0) },
-        keyboardShortcuts: $keyboardShortcuts,
-        selectionManager: .init(),
-        onTab: { _ in })
+      HStack {
+        KeyboardIconView("fn", size: 32)
+        EditableKeyboardShortcutsView<Focus>(
+          $focus,
+          focusBinding: { .keyboardShortcut($0) },
+          mode: .inlineEdit,
+          keyboardShortcuts: $keyboardShortcuts,
+          draggableEnabled: true,
+          selectionManager: selectionManager,
+          onTab: { _ in })
+        .onChange(of: keyboardShortcuts, perform: { newValue in
+          keyboardShortcuts = newValue
+        })
+        .roundedContainer(padding: 2, margin: 0)
         .overlay(NewCommandValidationView($validation))
         .frame(minHeight: 48, maxHeight: 48)
+      }
     }
     .onChange(of: keyboardShortcuts, perform: { newValue in
       validation = updateAndValidatePayload()
@@ -71,14 +86,31 @@ struct NewCommandKeyboardShortcutView: View {
 
 struct NewCommandKeyboardShortcutView_Previews: PreviewProvider {
   static var previews: some View {
-    NewCommandView(
-      workflowId: UUID().uuidString,
-      commandId: nil,
-      title: "New command",
-      selection: .keyboardShortcut,
-      payload: .placeholder,
-      onDismiss: {},
-      onSave: { _, _ in })
+    Group {
+      NewCommandView(
+        workflowId: UUID().uuidString,
+        commandId: nil,
+        title: "New command",
+        selection: .keyboardShortcut,
+        payload: .keyboardShortcut([
+          .init(key: "M", modifiers: [.function]),
+          .init(key: "O"),
+          .init(key: "L"),
+          .init(key: "L"),
+          .init(key: "Y"),
+        ]),
+        onDismiss: {},
+        onSave: { _, _ in })
+
+      NewCommandView(
+        workflowId: UUID().uuidString,
+        commandId: nil,
+        title: "New command",
+        selection: .keyboardShortcut,
+        payload: .placeholder,
+        onDismiss: {},
+        onSave: { _, _ in })
+    }
     .designTime()
   }
 }

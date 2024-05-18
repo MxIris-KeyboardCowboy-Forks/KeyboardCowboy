@@ -103,12 +103,11 @@ struct NewCommandWindow: Scene {
   private func payload(for command: Command) -> NewCommandPayload {
     switch command {
     case .application(let applicationCommand):
-      let action: NewCommandApplicationView.ApplicationAction
-      switch applicationCommand.action {
-      case .open:
-        action = .open
-      case .close:
-        action = .close
+      let action: NewCommandApplicationView.ApplicationAction = switch applicationCommand.action {
+      case .open:  .open
+      case .close: .close
+      case .hide:  .hide
+      case .unhide: .unhide
       }
 
       let inBackground = applicationCommand.modifiers.contains(.background)
@@ -123,11 +122,11 @@ struct NewCommandWindow: Scene {
     case .builtIn:
       return .placeholder
     case .menuBar(let command):
-      return .menuBar(tokens: command.tokens)
+      return .menuBar(tokens: command.tokens, application: command.application)
     case .mouse(let command):
       return .mouse(kind: command.kind)
-    case .keyboard:
-      return .placeholder
+    case .keyboard(let command):
+      return .keyboardShortcut(command.keyboardShortcuts)
     case .open(let openCommand):
       return .open(path: openCommand.path, application: openCommand.application)
     case .shortcut(let shortcutCommand):

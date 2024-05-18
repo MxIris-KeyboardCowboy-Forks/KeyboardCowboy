@@ -8,8 +8,8 @@ struct UIElementCommandView: View {
     case updateCommand(UIElementCommand)
     case commandAction(CommandContainerAction)
   }
-  @State var metaData: CommandViewModel.MetaData
   @State var model: UIElementCommand
+  private let metaData: CommandViewModel.MetaData
   private let debounce: DebounceManager<UIElementCommand>
   private let onAction: (Action) -> Void
   private let iconSize: CGSize
@@ -31,8 +31,8 @@ struct UIElementCommandView: View {
   }
 
   var body: some View {
-    CommandContainerView($metaData, placeholder: model.placeholder) { _ in
-      UIElementIconView(size: iconSize.width, stacked: .constant(false))
+    CommandContainerView(metaData, placeholder: model.placeholder) { _ in
+      UIElementIconView(size: iconSize.width)
     } content: { _ in
       VStack(alignment: .leading, spacing: 4) {
         ForEach(model.predicates.indices, id: \.self) { index in
@@ -125,14 +125,27 @@ struct UIElementCommandView: View {
               }
             }
           }
-          .roundedContainer(padding: 6, margin: 0)
 
           if index < model.predicates.count - 1 {
             ZenDivider()
           }
         }
       }
-    } subContent: { _ in
+      .roundedContainer(padding: 4, margin: 0)
+    } subContent: { metaData in
+      ZenCheckbox("Notify", style: .small, isOn: Binding(get: {
+          if case .bezel = metaData.notification.wrappedValue { return true } else { return false }
+        }, set: { newValue in
+          metaData.notification.wrappedValue = newValue ? .bezel : nil
+          onAction(.commandAction(.toggleNotify(newValue ? .bezel : nil)))
+        })) { value in
+          if value {
+            onAction(.commandAction(.toggleNotify(metaData.notification.wrappedValue)))
+          } else {
+            onAction(.commandAction(.toggleNotify(nil)))
+          }
+        }
+        .offset(x: 1)
     } onAction: { action in
       onAction(.commandAction(action))
     }

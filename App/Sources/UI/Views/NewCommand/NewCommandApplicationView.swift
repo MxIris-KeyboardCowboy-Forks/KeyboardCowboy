@@ -4,8 +4,10 @@ import Bonzai
 
 struct NewCommandApplicationView: View {
   enum ApplicationAction: String, CaseIterable {
-    case open = "Open"
+    case open  = "Open"
     case close = "Close"
+    case hide  = "Hide"
+    case unhide = "Unhide"
   }
 
   private let wikiUrl = URL(string: "https://github.com/zenangst/KeyboardCowboy/wiki/Commands#application-commands")!

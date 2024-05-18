@@ -4,7 +4,7 @@ import SwiftUI
 struct CommandView: View {
   enum Action {
     case changeDelay(payload: CommandViewPayload, newValue: Double?)
-    case toggleNotify(payload: CommandViewPayload, newValue: Bool)
+    case toggleNotify(payload: CommandViewPayload, newValue: Command.Notification?)
     case toggleEnabled(payload: CommandViewPayload, newValue: Bool)
     case updateName(payload: CommandViewPayload, newValue: String)
     case modify(Kind)
@@ -33,8 +33,6 @@ struct CommandView: View {
 
   @Binding private var command: CommandViewModel
   @Environment(\.controlActiveState) private var controlActiveState
-  @Environment(\.openWindow) private var openWindow
-  @State private var isTargeted: Bool = false
   private let publisher: CommandsPublisher
   private let selectionManager: SelectionManager<CommandViewModel>
   private let workflowId: String
@@ -63,45 +61,9 @@ struct CommandView: View {
       .onChange(of: command.meta.isEnabled, perform: { newValue in
         onAction(.toggleEnabled(payload: .init(workflowId: workflowId, commandId: command.id), newValue: newValue))
       })
-      .overlay(BorderedOverlayView(cornerRadius: 8))
+      .overlay(BorderedOverlayView(.readonly(selectionManager.selections.contains(command.id)), cornerRadius: 8))
       .compositingGroup()
-      .draggable($command.wrappedValue.draggablePayload(prefix: "WC|", selections: selectionManager.selections))
-      .dropDestination(DropItem.self, color: .accentColor) { items, location in
-        var urls = [URL]()
-        for item in items {
-          switch item {
-          case .text(let item):
-            // Don't accept dropping keyboard shortcuts.
-            if item.hasPrefix("WKS|") { return false }
-
-            if !item.hasPrefix("WC|"),
-               let url = URL(string: item) {
-              urls.append(url)
-              continue
-            }
-            guard let payload = item.draggablePayload(prefix: "WC|"),
-                  let (from, destination) = publisher.data.commands.moveOffsets(for: $command.wrappedValue,
-                                                                                with: payload) else {
-              return false
-            }
-            withAnimation(WorkflowCommandListView.animation) {
-              publisher.data.commands.move(fromOffsets: IndexSet(from), toOffset: destination)
-            }
-            onCommandAction(.moveCommand(workflowId: workflowId, indexSet: from, toOffset: destination))
-            return true
-          case .url(let url):
-            urls.append(url)
-          case .none:
-            return false
-          }
-        }
-
-        if !urls.isEmpty {
-          onCommandAction(.dropUrls(workflowId: workflowId, urls: urls))
-          return true
-        }
-        return false
-      }
+      .draggable($command.wrappedValue)
       .environmentObject(selectionManager)
       .animation(.none, value: command.meta.isEnabled)
       .grayscale(command.meta.isEnabled ? controlActiveState == .key ? 0 : 0.25 : 0.5)
@@ -147,7 +109,6 @@ struct CommandResolverView: View {
         switch action {
         case .editCommand(let command):
           openWindow(value: NewCommandWindow.Context.editCommand(workflowId: workflowId, commandId: command.id))
-          break
         case .commandAction(let action):
           handleCommandContainerAction(action)
         }
@@ -181,7 +142,7 @@ struct CommandResolverView: View {
         }
       .fixedSize(horizontal: false, vertical: true)
     case .script(let model):
-      ScriptCommandView(command.meta, model: model, iconSize: iconSize) { action in
+      ScriptCommandView(command.meta, model: .constant(model), iconSize: iconSize, onSubmit: {}) { action in
           switch action {
           case .edit:
             return
@@ -196,6 +157,8 @@ struct CommandResolverView: View {
           switch action {
           case .commandAction(let action):
             handleCommandContainerAction(action)
+          case .editCommand(let command):
+            openWindow(value: NewCommandWindow.Context.editCommand(workflowId: workflowId, commandId: command.id))
           default:
             onAction(.modify(.keyboard(action: action, payload: payload)))
           }

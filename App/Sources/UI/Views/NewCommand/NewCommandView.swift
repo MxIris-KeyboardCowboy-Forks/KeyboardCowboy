@@ -97,7 +97,7 @@ struct NewCommandView: View {
   private func sidebar() -> some View {
     ScrollView(.vertical) {
       VStack {
-        ForEach(Kind.allCases) { kind in
+        ForEach(Array(zip(Kind.allCases.indices, Kind.allCases)), id: \.1) { offset, kind in
           NewCommandButtonView(content: {
             HStack {
               NewCommandImageView(kind: kind)
@@ -108,9 +108,9 @@ struct NewCommandView: View {
                 .layoutPriority(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
               Spacer()
-
-              RegularKeyIcon(letter: "\(ModifierKey.command.keyValue)\(kind.rawKey)", width: 24, height: 24)
-                .fixedSize()
+              if offset < 10 {
+                KeyboardIconView("\(ModifierKey.command.keyValue)\(kind.rawKey)", size: 24)
+              }
             }
             .padding(.leading, 4)
             .padding(.trailing, 18)
@@ -149,10 +149,6 @@ struct NewCommandView: View {
       }
       .padding(.bottom)
     }
-  }
-
-  private func sidebarBackgroundView() -> some View {
-    Color(.textBackgroundColor)
   }
 
   private var detailView: some View {
@@ -251,7 +247,7 @@ struct NewCommandView: View {
                                scriptExtension: scriptExtension,
                                validation: $validation) { onSave($0, $title.wrappedValue) }
         } else {
-          NewCommandScriptView($payload, kind: .file, value: "",
+          NewCommandScriptView($payload, kind: .source, value: "",
                                scriptExtension: .shellScript,
                                validation: $validation) { onSave($0, $title.wrappedValue) }
         }

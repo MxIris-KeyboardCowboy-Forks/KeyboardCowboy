@@ -4,12 +4,13 @@ struct ContainerView: View {
   enum Action {
     case openScene(AppScene)
     case sidebar(SidebarView.Action)
-    case content(ContentListView.Action)
+    case content(ContentView.Action)
     case detail(DetailView.Action)
   }
 
   @Environment(\.undoManager) private var undoManager
   @ObservedObject private var navigationPublisher = NavigationPublisher()
+  @Binding private var contentState: ContentStore.State
 
   private let onAction: (Action, UndoManager?) -> Void
   private let applicationTriggerSelectionManager: SelectionManager<DetailViewModel.ApplicationTrigger>
@@ -25,6 +26,7 @@ struct ContainerView: View {
   private var focus: FocusState<AppFocus?>.Binding
 
   init(_ focus: FocusState<AppFocus?>.Binding,
+       contentState: Binding<ContentStore.State>,
        publisher: ContentPublisher,
        applicationTriggerSelectionManager: SelectionManager<DetailViewModel.ApplicationTrigger>,
        commandSelectionManager: SelectionManager<CommandViewModel>,
@@ -36,6 +38,7 @@ struct ContainerView: View {
        infoPublisher: InfoPublisher,
        commandPublisher: CommandsPublisher,
        onAction: @escaping (Action, UndoManager?) -> Void) {
+    _contentState = contentState
     self.focus = focus
     self.publisher = publisher
     self.applicationTriggerSelectionManager = applicationTriggerSelectionManager
@@ -54,59 +57,51 @@ struct ContainerView: View {
     NavigationSplitView(
       columnVisibility: $navigationPublisher.columnVisibility,
       sidebar: {
-        SidebarView(focus,
-                    configSelectionManager: configSelectionManager,
-                    groupSelectionManager: groupsSelectionManager,
-                    contentSelectionManager: contentSelectionManager
-        ) { onAction(.sidebar($0), undoManager) }
-          .frame(minWidth: 180, maxWidth: .infinity, alignment: .leading)
+        SidebarView(
+          focus,
+          configSelectionManager: configSelectionManager,
+          groupSelectionManager: groupsSelectionManager,
+          contentSelectionManager: contentSelectionManager,
+          onAction: { onAction(.sidebar($0), undoManager) })
+        .onChange(of: contentState, perform: { newValue in
+          guard newValue == .initialized else { return }
+          guard let groupId = groupsSelectionManager.lastSelection else { return }
+          onAction(.sidebar(.selectGroups([groupId])), undoManager)
+        })
+        .opacity(contentState == .initialized ? 1 : 0)
+        .frame(height: contentState == .initialized ? nil : 0)
+        .navigationSplitViewColumnWidth(ideal: 250)
       },
       content: {
-        ContentListView(focus,
-                        contentSelectionManager: contentSelectionManager,
-                        groupSelectionManager: groupsSelectionManager,
-                        onAction: {
-          onAction(.content($0), undoManager)
+        ContentView(
+          focus,
+          groupId: groupsSelectionManager.lastSelection ?? groupsSelectionManager.selections.first ?? "empty",
+          contentSelectionManager: contentSelectionManager,
+          onAction: {
+            onAction(.content($0), undoManager)
 
-          if case .addWorkflow = $0 {
-            Task { @MainActor in focus.wrappedValue = .detail(.name) }
-          }
-        })
-        .onAppear {
-          if !publisher.data.isEmpty {
-            DispatchQueue.main.async {
-              focus.wrappedValue = .workflows
+            if case .addWorkflow = $0 {
+              Task { @MainActor in focus.wrappedValue = .detail(.name) }
             }
-          }
-        }
+          })
+        .opacity(contentState == .initialized ? 1 : 0)
+        .navigationSplitViewColumnWidth(min: 180, ideal: 250)
       },
       detail: {
-        DetailView(focus,
-                   applicationTriggerSelectionManager: applicationTriggerSelectionManager,
-                   commandSelectionManager: commandSelectionManager,
-                   keyboardShortcutSelectionManager: keyboardShortcutSelectionManager,
-                   triggerPublisher: triggerPublisher,
-                   infoPublisher: infoPublisher,
-                   commandPublisher: commandPublisher,
-                   onAction: { onAction(.detail($0), undoManager) })
-        .edgesIgnoringSafeArea(isRunningPreview ? [] : [.top])
-        .background(Color(nsColor: .textBackgroundColor).ignoresSafeArea(edges: .all))
-        .overlay(alignment: .topTrailing, content: {
-          if KeyboardCowboy.env() != .production {
-            Rectangle()
-              .fill(Gradient(colors: [
-                Color(.systemYellow),
-                Color(nsColor: NSColor.systemYellow.blended(withFraction: 0.3, of: NSColor.black)!)
-              ]))
-              .frame(width: 75, height: 20)
-              .rotationEffect(.degrees(45))
-              .offset(x: 30, y: -30)
-              .fixedSize()
-          }
-        })
+        DetailView(
+          focus,
+          applicationTriggerSelectionManager: applicationTriggerSelectionManager,
+          commandSelectionManager: commandSelectionManager,
+          keyboardShortcutSelectionManager: keyboardShortcutSelectionManager,
+          triggerPublisher: triggerPublisher,
+          infoPublisher: infoPublisher,
+          commandPublisher: commandPublisher,
+          onAction: { onAction(.detail($0), undoManager) })
+        .opacity(contentState == .initialized ? 1 : 0)
+        .frame(minHeight: 400)
+        .navigationSplitViewColumnWidth(min: 350, ideal: 400)
       })
     .navigationSplitViewStyle(.balanced)
-    .frame(minWidth: 850, minHeight: 420)
   }
 }
 
@@ -115,6 +110,7 @@ struct ContainerView_Previews: PreviewProvider {
   static var previews: some View {
     ContainerView(
       $focus,
+      contentState: .readonly(.initialized),
       publisher: DesignTime.contentPublisher,
       applicationTriggerSelectionManager: .init(),
       commandSelectionManager: .init(),

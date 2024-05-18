@@ -20,28 +20,23 @@ struct NewCommandImageView: View {
       case .application:
         image(for: "/Applications")
       case .keyboardShortcut:
-        ModifierKeyIcon(key: .function)
+        KeyboardIconView("fn", size: 24)
       case .shortcut:
         image(for: "/System/Applications/Shortcuts.app")
       case .script:
-        image(for: "/System/Applications/Utilities/Terminal.app")
+        ScriptIconView(size: 24)
       case .text:
-        if let contents = FileManager.default.contents(atPath: "/System/Library/PrivateFrameworks/AOSUI.framework/Versions/A/Resources/pref_notes.icns"),
-           let image = NSImage(data: contents) {
-          Image(nsImage: image)
-            .resizable()
-            .aspectRatio(1, contentMode: .fill)
-        }
+        TypingIconView(size: 24)
       case .system:
         image(for: "/System")
       case .menuBar:
-        MenuIconView(size: 24, stacked: .constant(false))
+        MenuIconView(size: 24)
       case .mouse:
-        image(for: "/System/Library/Frameworks/IOBluetoothUI.framework/Versions/A/Resources/MightyMouse.icns")
+        MouseIconView(size: 24)
       case .uiElement:
-        UIElementIconView(size: 24, stacked: .constant(false))
+        UIElementIconView(size: 24)
       case .windowManagement:
-        WindowManagementIconView(size: 24, stacked: .constant(false))
+        WindowManagementIconView(size: 24)
       case .builtIn:
         image(for: Bundle.main.bundlePath)
       }

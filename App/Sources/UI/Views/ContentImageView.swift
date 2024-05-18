@@ -1,3 +1,4 @@
+import Bonzai
 import SwiftUI
 
 struct ContentImageView: View {
@@ -9,30 +10,77 @@ struct ContentImageView: View {
   var body: some View {
     switch image.kind {
     case .icon(let icon):
-      ContentIconImageView(icon: icon, size: size)
+      IconView(icon: icon, size: .init(width: size, height: size))
     case .command(let kind):
       switch kind {
-      case .application, .open, .builtIn:
+      case .application, .open:
         EmptyView()
+      case .builtIn(let model):
+        switch model.kind {
+        case .macro(let action):
+          switch action.kind {
+          case .record:
+            MacroIconView(.record, size: size - 6)
+          case .remove:
+            MacroIconView(.remove, size: size - 6)
+          }
+        case .userMode:
+          UserModeIconView(size: size - 6)
+        case .commandLine:
+          CommandLineIconView(size: size - 6)
+        }
       case .keyboard(let model):
-        ContentKeyboardImageView(keys: model.keys)
-          .rotationEffect(.degrees(-(3.75 * image.offset)))
-          .offset(.init(width: -(image.offset * 1.25),
-                        height: image.offset * 1.25))
+        KeyboardIconView(model.keys.first?.key.uppercased() ?? "", size: size - 6)
+          .opacity(model.keys.first != nil ? 1 : 0)
       case .script(let model):
         ContentScriptImageView(source: model.source, size: size)
       case .shortcut:
         ContentShortcutImageView(size: size)
       case .text:
-        ContentTypeImageView()
-      case .plain, .systemCommand, .mouse:
+        TypingIconView(size: size - 6)
+      case .mouse:
+        MouseIconView(size: size - 6)
+      case .plain:
         EmptyView()
+      case .systemCommand(let model):
+        switch model.kind {
+        case .activateLastApplication:
+          ActivateLastApplicationIconView(size: size - 6)
+        case .applicationWindows:
+          MissionControlIconView(size: size - 6)
+        case .minimizeAllOpenWindows:
+          MinimizeAllIconView(size: size - 6)
+        case .missionControl:
+          MissionControlIconView(size: size - 6)
+        case .moveFocusToNextWindow:
+          MoveFocusToWindowIconView(direction: .next, scope: .visibleWindows, size: size - 6)
+        case .moveFocusToNextWindowFront:
+          MoveFocusToWindowIconView(direction: .next, scope: .activeApplication, size: size - 6)
+        case .moveFocusToNextWindowGlobal:
+          MoveFocusToWindowIconView(direction: .next, scope: .allWindows, size: size - 6)
+        case .moveFocusToPreviousWindow:
+          MoveFocusToWindowIconView(direction: .previous, scope: .allWindows, size: size - 6)
+        case .moveFocusToPreviousWindowFront:
+          MoveFocusToWindowIconView(direction: .previous, scope: .activeApplication, size: size - 6)
+        case .moveFocusToPreviousWindowGlobal:
+          MoveFocusToWindowIconView(direction: .previous, scope: .allWindows, size: size - 6)
+        case .moveFocusToNextWindowUpwards:
+          RelativeFocusIconView(.up, size: size - 6)
+        case .moveFocusToNextWindowDownwards:
+          RelativeFocusIconView(.down, size: size - 6)
+        case .moveFocusToNextWindowOnLeft:
+          RelativeFocusIconView(.left, size: size - 6)
+        case .moveFocusToNextWindowOnRight:
+          RelativeFocusIconView(.right, size: size - 6)
+        case .showDesktop:
+          DockIconView(size: size - 6)
+        }
       case .menuBar:
-        MenuIconView(size: size - 8, stacked: $stacked)
+        MenuIconView(size: size - 6)
       case .windowManagement:
-        WindowManagementIconView(size: size - 8, stacked: $stacked)
+        WindowManagementIconView(size: size - 6)
       case .uiElement:
-        UIElementIconView(size: size - 8, stacked: $stacked)
+        UIElementIconView(size: size - 6)
       }
     }
   }

@@ -50,16 +50,22 @@ struct DetailViewModel: Hashable, Identifiable, Equatable {
       switch self {
       case .applications(let array): array.map(\.id).joined()
       case .keyboardShortcuts(let keyboardTrigger): keyboardTrigger.shortcuts.map(\.id).joined()
+      case .snippet(let trigger): trigger.id
       case .empty: "empty"
       }
     }
 
     case applications([DetailViewModel.ApplicationTrigger])
     case keyboardShortcuts(DetailViewModel.KeyboardTrigger)
+    case snippet(DetailViewModel.SnippetTrigger)
     case empty
   }
 
-  struct ApplicationTrigger: Codable, Hashable, Identifiable, Equatable {
+  struct ApplicationTrigger: Codable, Hashable, Identifiable, Equatable, Transferable {
+    static var transferRepresentation: some TransferRepresentation {
+      CodableRepresentation(contentType: .applicationTrigger)
+    }
+
     var id: String
     var name: String
     var application: Application
@@ -72,16 +78,14 @@ struct DetailViewModel: Hashable, Identifiable, Equatable {
     enum Context: String, Hashable, Codable, CaseIterable, Identifiable {
       public var id: String { rawValue }
 
-      case closed, launched, frontMost
+      case closed, launched, frontMost, resignFrontMost
 
       public var displayValue: String {
         switch self {
-        case .launched:
-          return "Launched"
-        case .closed:
-          return "Closed"
-        case .frontMost:
-          return "When in front most"
+        case .launched:  "Launched"
+        case .closed:    "Closed"
+        case .frontMost: "When in front most"
+        case .resignFrontMost: "When resigns front most"
         }
       }
     }
@@ -91,5 +95,10 @@ struct DetailViewModel: Hashable, Identifiable, Equatable {
     var passthrough: Bool
     var holdDuration: Double?
     var shortcuts: [KeyShortcut]
+  }
+
+  struct SnippetTrigger: Codable, Hashable, Equatable {
+    var id: String
+    var text: String
   }
 }

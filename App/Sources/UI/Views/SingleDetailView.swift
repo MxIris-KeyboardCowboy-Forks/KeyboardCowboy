@@ -24,6 +24,7 @@ struct SingleDetailView: View {
                                  holdDuration: Double?,
                                  keyboardShortcuts: [KeyShortcut])
     case updateName(workflowId: Workflow.ID, name: String)
+    case updateSnippet(workflowId: Workflow.ID, snippet: DetailViewModel.SnippetTrigger)
   }
 
   @Environment(\.openWindow) private var openWindow
@@ -55,24 +56,26 @@ struct SingleDetailView: View {
   var body: some View {
     ScrollViewReader { proxy in
         VStack(alignment: .leading) {
-          WorkflowInfoView(focus, publisher: infoPublisher,
-                           onInsertTab: {
-            switch triggerPublisher.data {
-            case .applications:
-              focus.wrappedValue = .detail(.applicationTriggers)
-            case .keyboardShortcuts:
-              focus.wrappedValue = .detail(.keyboardShortcuts)
-            case .empty:
-              focus.wrappedValue = .detail(.addAppTrigger)
-            }
-          }, onAction: { action in
-            switch action {
-            case .updateName(let name):
-              onAction(.updateName(workflowId: infoPublisher.data.id, name: name))
-            case .setIsEnabled(let isEnabled):
-              onAction(.setIsEnabled(workflowId: infoPublisher.data.id, isEnabled: isEnabled))
-            }
-          })
+          WorkflowInfoView(
+            focus, publisher: infoPublisher, onInsertTab: {
+              switch triggerPublisher.data {
+              case .applications:
+                focus.wrappedValue = .detail(.applicationTriggers)
+              case .keyboardShortcuts:
+                focus.wrappedValue = .detail(.keyboardShortcuts)
+              case .snippet:
+                focus.wrappedValue = .detail(.addSnippetTrigger)
+              case .empty:
+                focus.wrappedValue = .detail(.addAppTrigger)
+              }
+            }, onAction: { action in
+              switch action {
+              case .updateName(let name):
+                onAction(.updateName(workflowId: infoPublisher.data.id, name: name))
+              case .setIsEnabled(let isEnabled):
+                onAction(.setIsEnabled(workflowId: infoPublisher.data.id, isEnabled: isEnabled))
+              }
+            })
           .environmentObject(commandSelectionManager)
           .padding(.horizontal, 24)
           .padding(.bottom, 6)
@@ -85,7 +88,7 @@ struct SingleDetailView: View {
             publisher: triggerPublisher,
             applicationTriggerSelectionManager: applicationTriggerSelectionManager,
             keyboardShortcutSelectionManager: keyboardShortcutSelectionManager,
-            onTab: { 
+            onTab: {
               if commandPublisher.data.commands.isEmpty {
                 focus.wrappedValue = .detail(.addCommand)
               } else {
@@ -94,6 +97,7 @@ struct SingleDetailView: View {
             },
             onAction: onAction)
           .padding(.horizontal)
+          .padding(.bottom, 8)
           .id(infoPublisher.data.id)
         }
         .padding(.top)
@@ -111,6 +115,7 @@ struct SingleDetailView: View {
           switch triggerPublisher.data {
           case .applications(let array): !array.isEmpty
           case .keyboardShortcuts(let keyboardTrigger): !keyboardTrigger.shortcuts.isEmpty
+          case .snippet(let snippet): !snippet.text.isEmpty
           case .empty: false
           }
         }, set: { _ in }),
@@ -130,14 +135,21 @@ struct SingleDetailView: View {
 struct SingleDetailView_Previews: PreviewProvider {
   @FocusState static var focus: AppFocus?
   static var previews: some View {
-    SingleDetailView($focus,
-                     applicationTriggerSelectionManager: .init(),
-                     commandSelectionManager: .init(),
-                     keyboardShortcutSelectionManager: .init(),
-                     triggerPublisher: DesignTime.triggerPublisher,
-                     infoPublisher: DesignTime.infoPublisher,
-                     commandPublisher: DesignTime.commandsPublisher) { _ in }
-      .designTime()
-      .frame(height: 900)
+    let colorSchemes: [ColorScheme] = [.dark, .light]
+    HStack(spacing: 0) {
+      ForEach(colorSchemes, id: \.self) { colorScheme in
+        SingleDetailView($focus,
+                         applicationTriggerSelectionManager: .init(),
+                         commandSelectionManager: .init(),
+                         keyboardShortcutSelectionManager: .init(),
+                         triggerPublisher: DesignTime.triggerPublisher,
+                         infoPublisher: DesignTime.infoPublisher,
+                         commandPublisher: DesignTime.commandsPublisher) { _ in }
+          .background()
+          .environment(\.colorScheme, colorScheme)
+      }
+    }
+    .designTime()
+    .frame(height: 900)
   }
 }

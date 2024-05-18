@@ -72,15 +72,22 @@ final class Core {
     recorderStore: recorderStore,
     shortcutStore: shortcutStore,
     scriptCommandRunner: scriptCommandRunner)
+  lazy private(set) var macroCoordinator = MacroCoordinator()
   lazy private(set) var groupStore = GroupStore()
   lazy private(set) var keyCodeStore = KeyCodesStore(InputSourceController())
+  lazy private(set) var workflowRunner = WorkflowRunner(commandRunner: commandRunner,
+                                                        store: keyCodeStore, notifications: notifications)
+  lazy private(set) var notifications = MachPortUINotifications(keyboardShortcutsController: keyboardShortcutsController)
   lazy private(set) var machPortCoordinator = MachPortCoordinator(store: keyboardCommandRunner.store,
-                                                                  commandRunner: commandRunner,
                                                                   keyboardCommandRunner: keyboardCommandRunner,
                                                                   keyboardShortcutsController: keyboardShortcutsController,
-                                                                  mode: .intercept)
+                                                                  macroCoordinator: macroCoordinator,
+                                                                  mode: .intercept,
+                                                                  notifications: notifications,
+                                                                  workflowRunner: workflowRunner)
   lazy private(set) var engine = KeyboardCowboyEngine(
     contentStore,
+    applicationTriggerController: applicationTriggerController,
     commandRunner: commandRunner,
     keyboardCommandRunner: keyboardCommandRunner,
     keyboardShortcutsController: keyboardShortcutsController,
@@ -88,23 +95,41 @@ final class Core {
     machPortCoordinator: machPortCoordinator,
     scriptCommandRunner: scriptCommandRunner,
     shortcutStore: shortcutStore,
+    snippetController: snippetController,
     uiElementCaptureStore: uiElementCaptureStore,
+    workflowRunner: workflowRunner,
     workspace: .shared)
   lazy private(set) var uiElementCaptureStore = UIElementCaptureStore()
   lazy private(set) var recorderStore = KeyShortcutRecorderStore()
   lazy private(set) var shortcutStore = ShortcutStore(scriptCommandRunner)
+  lazy private(set) var commandLine = CommandLineCoordinator.shared
 
   // MARK: - Runners
   lazy private(set) var commandRunner = CommandRunner(
     applicationStore: ApplicationStore.shared,
-    builtInCommandRunner: BuiltInCommandRunner(configurationStore: configurationStore),
+    builtInCommandRunner: BuiltInCommandRunner(
+      commandLine: commandLine,
+      configurationStore: configurationStore,
+      macroRunner: macroRunner
+    ),
     scriptCommandRunner: scriptCommandRunner,
     keyboardCommandRunner: keyboardCommandRunner,
+    systemCommandRunner: systemCommandRunner,
     uiElementCommandRunner: uiElementCommandRunner
   )
+  lazy private(set) var systemCommandRunner = SystemCommandRunner()
   lazy private(set) var keyboardCommandRunner = KeyboardCommandRunner(store: keyCodeStore)
   lazy private(set) var uiElementCommandRunner = UIElementCommandRunner()
   lazy private(set) var scriptCommandRunner = ScriptCommandRunner(workspace: .shared)
+  lazy private(set) var macroRunner = MacroRunner(coordinator: macroCoordinator)
+  lazy private(set) var snippetController = SnippetController(
+    commandRunner: commandRunner,
+    keyboardCommandRunner: keyboardCommandRunner,
+    keyboardShortcutsController: keyboardShortcutsController,
+    store: keyCodeStore
+  )
+
+  lazy private(set) var applicationTriggerController = ApplicationTriggerController(workflowRunner)
 
   // MARK: - Controllers
 

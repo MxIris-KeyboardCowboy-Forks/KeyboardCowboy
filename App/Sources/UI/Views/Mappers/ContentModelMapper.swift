@@ -2,17 +2,17 @@ import Bonzai
 import Foundation
 
 final class ContentModelMapper {
-  func map(_ workflow: Workflow) -> ContentViewModel {
-    workflow.asViewModel(nil)
+  func map(_ workflow: Workflow, groupId: String) -> ContentViewModel {
+    workflow.asViewModel(nil, groupId: groupId)
   }
 }
 
 private extension Array where Element == Workflow {
-  func asViewModels(_ groupName: String?) -> [ContentViewModel] {
+  func asViewModels(_ groupName: String?, groupId: String) -> [ContentViewModel] {
     var viewModels = [ContentViewModel]()
     viewModels.reserveCapacity(self.count)
     for (offset, model) in self.enumerated() {
-      viewModels.append(model.asViewModel(offset == 0 ? groupName : nil))
+      viewModels.append(model.asViewModel(offset == 0 ? groupName : nil, groupId: groupId))
     }
     return viewModels
   }
@@ -47,22 +47,30 @@ private extension String {
 }
 
 private extension Workflow {
-  func asViewModel(_ groupName: String?) -> ContentViewModel {
+  func asViewModel(_ groupName: String?, groupId: String) -> ContentViewModel {
     let commandCount = commands.count
-    let binding: String?
-    if let trigger, let triggerBinding = trigger.binding {
-      binding = triggerBinding
-    } else {
-      binding = nil
+    let viewModelTrigger: ContentViewModel.Trigger?
+    viewModelTrigger = switch trigger {
+    case .application: .application("foo")
+    case .keyboardShortcuts(let trigger): .keyboard(trigger.shortcuts.binding ?? "")
+    case .snippet(let snippetTrigger): .snippet(snippetTrigger.text)
+    case .none: nil
+    }
+
+    let execution: ContentViewModel.Execution = switch execution {
+    case .concurrent: .concurrent
+    case .serial: .serial
     }
 
     return ContentViewModel(
       id: id,
+      groupId: groupId,
       groupName: groupName,
       name: name,
       images: commands.images(limit: 1),
       overlayImages: commands.overlayImages(limit: 3),
-      binding: binding,
+      trigger: viewModelTrigger,
+      execution: execution,
       badge: commandCount > 1 ? commandCount : 0,
       badgeOpacity: commandCount > 1 ? 1.0 : 0.0,
       isEnabled: isEnabled)
@@ -74,7 +82,7 @@ private extension Workflow.Trigger {
     switch self {
     case .keyboardShortcuts(let trigger):
       return trigger.shortcuts.binding
-    case .application:
+    case .application, .snippet:
       return nil
     }
   }
@@ -107,7 +115,8 @@ private extension Array where Element == Command {
 
   func images(limit: Int) -> [ContentViewModel.ImageModel] {
     var images = [ContentViewModel.ImageModel]()
-    for (offset, element) in self.reversed().enumerated() where element.isEnabled {
+    var offset: Int = 0
+    for element in self.reversed() where element.isEnabled {
       // Don't render icons for commands that are not enabled.
       if !element.isEnabled { continue }
 
@@ -126,21 +135,30 @@ private extension Array where Element == Command {
       case .menuBar(let command):
         images.append(.init(id: command.id, offset: convertedOffset, kind: .command(.menuBar(.init(id: command.id, tokens: command.tokens)))))
       case .builtIn(let command):
-        let path = Bundle.main.bundleURL.path
-        images.append(
-          ContentViewModel.ImageModel(
-            id: command.id,
-            offset: convertedOffset,
-            kind: .icon(.init(bundleIdentifier: path, path: path)))
-        )
+        switch command.kind {
+        case .macro(let action):
+          switch action.kind {
+          case .record:
+            images.append(.init(id: command.id, offset: convertedOffset, 
+                                kind: .command(.builtIn(.init(id: command.id, name: command.name, 
+                                                              kind: .macro(.record))))))
+          case .remove:
+            images.append(.init(id: command.id, offset: convertedOffset,
+                                kind: .command(.builtIn(.init(id: command.id, name: command.name, 
+                                                              kind: .macro(.remove))))))
+          }
+        case .userMode:
+          images.append(.init(id: command.id, offset: convertedOffset, 
+                              kind: .command(.builtIn(.init(id: command.id, name: command.name, 
+                                                            kind: .userMode(UserMode(id: command.id, name: command.name, 
+                                                                                     isEnabled: command.isEnabled), .toggle))))))
+        case .commandLine(let action):
+            images.append(.init(id: command.id, offset: convertedOffset,
+                                kind: .command(.builtIn(.init(id: command.id, name: command.name,
+                                                              kind: .commandLine(action))))))
+        }
       case .mouse(let command):
-        let path = "/System/Library/Frameworks/IOBluetoothUI.framework/Versions/A/Resources/MightyMouse.icns"
-        images.append(
-          ContentViewModel.ImageModel(
-            id: command.id,
-            offset: convertedOffset,
-            kind: .icon(.init(bundleIdentifier: path, path: path)))
-        )
+        images.append(.init(id: command.id, offset: convertedOffset, kind: .command(.mouse(.init(id: command.id, kind: command.kind)))))
       case .keyboard(let keyCommand):
         if let keyboardShortcut = keyCommand.keyboardShortcuts.first {
           images.append(.init(id: keyboardShortcut.id, offset: convertedOffset,
@@ -165,11 +183,16 @@ private extension Array where Element == Command {
         case .inline(let source):
           images.append(.init(id: script.id,
                               offset: convertedOffset,
-                              kind: .command(.script(.init(id: script.id, source: .inline(source), scriptExtension: script.kind)))))
+                              kind: .command(.script(.init(id: script.id, source: .inline(source), 
+                                                           scriptExtension: script.kind, variableName: script.meta.variableName ?? "",
+                                                           execution: .concurrent)))))
         case .path(let source):
           images.append(.init(id: script.id,
                               offset: convertedOffset,
-                              kind: .command(.script(.init(id: script.id, source: .path(source), scriptExtension: script.kind)))))
+                              kind: .command(.script(.init(id: script.id, source: .path(source), 
+                                                           scriptExtension: script.kind,
+                                                           variableName: script.meta.variableName ?? "",
+                                                           execution: .concurrent)))))
         }
 
       case .shortcut(let shortcut):
@@ -190,7 +213,8 @@ private extension Array where Element == Command {
           ContentViewModel.ImageModel(
             id: command.id,
             offset: convertedOffset,
-            kind: .icon(.init(bundleIdentifier: command.kind.iconPath, path: command.kind.iconPath)))
+            kind: .command(.systemCommand(.init(id: command.id, kind: command.kind))
+          ))
         )
       case .uiElement(let command):
         images.append(.init(id: command.id, offset: convertedOffset, kind: .command(.uiElement(command))))
@@ -202,6 +226,7 @@ private extension Array where Element == Command {
             kind: .command(.windowManagement(.init(id: command.id, kind: command.kind, animationDuration: command.animationDuration))))
         )
       }
+      offset += 1
     }
 
     return images.reversed()

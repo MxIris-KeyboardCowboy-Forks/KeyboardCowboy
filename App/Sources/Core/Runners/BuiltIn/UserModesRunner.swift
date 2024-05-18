@@ -14,7 +14,7 @@ final class UserModesRunner {
   func run(_ model: UserMode, builtInCommand: BuiltInCommand, action: BuiltInCommand.Kind.Action) async throws -> String {
     await Benchmark.shared.start("UserModesRunner")
     let output: String
-    var userModes = UserSpace.shared.userModes
+    var userModes = await UserSpace.shared.userModes
 
     guard let index = userModes.firstIndex(where: { $0.id == model.id }) else {
       throw UserModesRunnerError.unableToResolveMode
@@ -24,13 +24,13 @@ final class UserModesRunner {
     switch action {
     case .enable:
       modifiedMode.isEnabled = true
-      output = "Enable: \(model.name)"
+      output = "\(builtInCommand.name) ✅"
     case .disable:
       modifiedMode.isEnabled = false
-      output = "Disable: \(model.name)"
+      output = "\(builtInCommand.name) ⏸️"
     case .toggle:
       modifiedMode.isEnabled.toggle()
-      output = "\(modifiedMode.name): \( modifiedMode.isEnabled ? "✅" : "⏸️")"
+      output = "\(builtInCommand.name): \( modifiedMode.isEnabled ? "✅" : "⏸️")"
     }
     userModes[index] = modifiedMode
     await UserSpace.shared.setUserModes(userModes)

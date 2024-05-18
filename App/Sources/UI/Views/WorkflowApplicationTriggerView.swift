@@ -33,6 +33,7 @@ struct WorkflowApplicationTriggerView: View {
   var body: some View {
     VStack(alignment: .leading) {
       HStack {
+        GenericAppIconView(size: 28)
         Menu {
           ForEach(applicationStore.applications.lazy, id: \.path) { application in
             Button(action: {
@@ -54,31 +55,48 @@ struct WorkflowApplicationTriggerView: View {
                               hoverEffect: Binding<Bool>.readonly(!data.isEmpty),
                               padding: .init(horizontal: .large, vertical: .large))))
       }
-      .padding(6)
+      .roundedContainer(padding: 6, margin: 0)
       .frame(minHeight: 44)
-      .background(
-        RoundedRectangle(cornerRadius: 8)
-          .fill(Color(.textBackgroundColor).opacity(0.65))
-      )
 
       if !data.isEmpty {
+        let count = data.count
         ScrollView {
           LazyVStack(spacing: 0) {
+            let lastID = $data.lazy.last?.id
             ForEach($data.lazy, id: \.id) { element in
               WorkflowApplicationTriggerItemView(element, data: $data,
                                                  selectionManager: selectionManager,
                                                  onAction: onAction)
               .contentShape(Rectangle())
+              .dropDestination(DetailViewModel.ApplicationTrigger.self, color: .accentColor, onDrop: { items, location in
+
+                let ids = Array(selectionManager.selections)
+                guard let (from, destination) = data.moveOffsets(for: element.wrappedValue, with: ids) else {
+                  return false
+                }
+
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.65, blendDuration: 0.2)) {
+                  data.move(fromOffsets: IndexSet(from), toOffset: destination)
+                }
+
+                onAction(.updateApplicationTriggers(data))
+
+                return false
+              })
               .focusable(focus, as: .detail(.applicationTrigger(element.id))) {
                 selectionManager.handleOnTap(data, element: element.wrappedValue)
               }
+
+              let notLastItem = element.id != lastID
               ZenDivider()
+                .opacity(notLastItem ? 1 : 0)
+                .frame(height: notLastItem ? nil : 0)
             }
             .onCommand(#selector(NSResponder.insertTab(_:)), perform: {
               onTab()
             })
             .onCommand(#selector(NSResponder.selectAll(_:)), perform: {
-              selectionManager.selections = Set(data.map(\.id))
+              selectionManager.publish(Set(data.map(\.id)))
             })
             .onMoveCommand(perform: { direction in
               if let elementID = selectionManager.handle(direction, data, proxy: nil) {
@@ -94,28 +112,37 @@ struct WorkflowApplicationTriggerView: View {
           }
           .focused(focus, equals: .detail(.applicationTriggers))
         }
-        .scrollDisabled(data.count <= 4)
-        .frame(minHeight: 48, maxHeight: min(CGFloat(data.count * 48), 300) )
-        .roundedContainer(padding: 0, margin: 0)
+        .scrollDisabled(count <= 4)
+        .frame(minHeight: 46, maxHeight: maxHeight(count))
+        .roundedContainer(12, padding: 2, margin: 0)
       }
     }
     .enableInjection()
   }
+
+  private func maxHeight(_ count: Int) -> CGFloat {
+    if count > 1 {
+      return min(CGFloat(count * 48), 300)
+    } else {
+      return 46 // Max size without the `ZenDivider`
+    }
+  }
 }
 
-//struct WorkflowApplicationTriggerView_Previews: PreviewProvider {
-//  @FocusState static var focus: AppFocus?
-//  static var previews: some View {
-//    WorkflowApplicationTriggerView(
-//      $focus,
-//      data: [
-//        .init(id: "1", name: "Application 1", application: .finder(),
-//              contexts: []),
-//      ],
-//      selectionManager: SelectionManager(),
-//      onTab: { },
-//      onAction: { _ in }
-//    )
-//    .environmentObject(ApplicationStore.shared)
-//  }
-//}
+struct WorkflowApplicationTriggerView_Previews: PreviewProvider {
+  @FocusState static var focus: AppFocus?
+  static var previews: some View {
+    WorkflowApplicationTriggerView(
+      $focus,
+      data: [
+        .init(id: "1", name: "Application 1", application: .finder(),
+              contexts: []),
+      ],
+      selectionManager: SelectionManager(),
+      onTab: { },
+      onAction: { _ in }
+    )
+    .environmentObject(ApplicationStore.shared)
+    .padding()
+  }
+}

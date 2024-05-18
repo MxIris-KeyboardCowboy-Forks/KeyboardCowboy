@@ -11,34 +11,46 @@ struct BuiltInCommand: MetaDataProviding {
       case toggle
     }
 
+    case macro(MacroAction)
     case userMode(UserMode, Action)
+    case commandLine(CommandLineAction)
 
     var id: String {
       switch self {
-        case .userMode(let id, let action):
-        return switch action {
-        case .enable: "enable-\(id)"
-        case .disable: "disable-\(id)"
-        case .toggle: "toggle-\(id)"
+        case .macro(let macro): macro.id
+      case .userMode(let id, let action):
+        switch action {
+          case .enable: "enable-\(id)"
+          case .disable: "disable-\(id)"
+          case .toggle: "toggle-\(id)"
         }
+      case .commandLine(let action): "commandLine-\(action.id)"
       }
     }
 
     var userModeId: UserMode.ID {
       switch self {
-        case .userMode(let model, _):
-        return model.id
+      case .macro(let action): action.id
+      case .userMode(let model, _): model.id
+      case .commandLine(let action): action.id
       }
     }
 
     public var displayValue: String {
       switch self {
+        case .macro(let action):
+          switch action.kind {
+            case .remove: "Remove Macro"
+            case .record: "Record Macro"
+          }
         case .userMode(_, let action):
-        return switch action {
-        case .enable: "Enable User Mode"
-        case .disable: "Disable User Mode"
-        case .toggle: "Toggle User Mode"
-        }
+          switch action {
+            case .enable: "Enable User Mode"
+            case .disable: "Disable User Mode"
+            case .toggle: "Toggle User Mode"
+          }
+      case .commandLine:
+        "Open Command Line"
       }
     }
   }
@@ -49,10 +61,16 @@ struct BuiltInCommand: MetaDataProviding {
     case notification
   }
 
-  init(id: String = UUID().uuidString, kind: Kind, notification: Bool) {
+  init(id: String = UUID().uuidString, kind: Kind, notification: Command.Notification?) {
     self.kind = kind
     self.meta = .init(id: id, name: kind.displayValue, isEnabled: true, notification: notification)
   }
+
+  init(kind: Kind, meta: Command.MetaData) {
+    self.kind = kind
+    self.meta = meta
+  }
+
 
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -62,5 +80,9 @@ struct BuiltInCommand: MetaDataProviding {
       self.meta = try MetaDataMigrator.migrate(decoder)
     }
     self.kind = try container.decode(BuiltInCommand.Kind.self, forKey: .kind)
+  }
+
+  func copy() -> BuiltInCommand {
+    BuiltInCommand(kind: self.kind, meta: self.meta.copy())
   }
 }

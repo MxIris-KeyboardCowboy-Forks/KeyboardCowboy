@@ -33,7 +33,7 @@ struct GroupsListView: View {
   @EnvironmentObject private var publisher: GroupsPublisher
   @State private var confirmDelete: Confirm?
   private let contentSelectionManager: SelectionManager<ContentViewModel>
-  private let debounceSelectionManager: DebounceSelectionManager<GroupDebounce>
+  private let debounce: DebounceController<GroupDebounce>
   private let namespace: Namespace.ID
   private let onAction: (GroupsListView.Action) -> Void
   private let selectionManager: SelectionManager<GroupViewModel>
@@ -49,9 +49,9 @@ struct GroupsListView: View {
     self.selectionManager = selectionManager
     self.contentSelectionManager = contentSelectionManager
     self.onAction = onAction
-    self.debounceSelectionManager = .init(.init(groups: selectionManager.selections),
-                                          milliseconds: 150,
-                                          onUpdate: { snapshot in
+    self.debounce = .init(.init(groups: selectionManager.selections),
+                          milliseconds: 150,
+                          onUpdate: { snapshot in
       onAction(.selectGroups(snapshot.groups))
     })
   }
@@ -60,18 +60,38 @@ struct GroupsListView: View {
     ScrollViewReader { proxy in
       ScrollView {
         if publisher.data.isEmpty {
-          GroupsEmptyListView(namespace, onAction: onAction)
+          GroupsEmptyListView(namespace, isVisible: .readonly(publisher.data.isEmpty), onAction: onAction)
         } else {
           LazyVStack(spacing: 0) {
             ForEach(publisher.data.lazy, id: \.id) { group in
-              GroupItemView(
-                group,
-                groupsPublisher: publisher,
-                selectionManager: selectionManager,
-                onAction: onAction
-              )
+              GroupItemView(group, selectionManager: selectionManager,
+                            onAction: onAction)
               .contentShape(Rectangle())
+              .dropDestination(SidebarListDropItem.self, color: .accentColor, onDrop: { items, location in
+                for item in items {
+                  switch item {
+                  case .group:
+                    let ids = Array(selectionManager.selections)
+                    guard let (from, destination) = publisher.data.moveOffsets(for: group, with: ids) else {
+                      return false
+                    }
+
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.65, blendDuration: 0.2)) {
+                      publisher.data.move(fromOffsets: IndexSet(from), toOffset: destination)
+                    }
+
+                    onAction(.moveGroups(source: from, destination: destination))
+                  case .workflow:
+                    onAction(.moveWorkflows(workflowIds: contentSelectionManager.selections, groupId: group.id))
+                  }
+                }
+                return true
+              })
               .overlay(content: { confirmDeleteView(group) })
+              .modifier(LegacyOnTapFix(onTap: {
+                focus = .element(group.id)
+                onTap(group)
+              }))
               .contextMenu(menuItems: {
                 contextualMenu(for: group, onAction: onAction)
               })
@@ -82,12 +102,13 @@ struct GroupsListView: View {
                   focus = .element(match.id)
                 } else {
                   onTap(group)
+                  proxy.scrollTo(group.id)
                 }
               }
               .gesture(
                 TapGesture(count: 1)
                   .onEnded { _ in
-                    onTap(group)
+                    focus = .element(group.id)
                   }
                   .simultaneously(with: TapGesture(count: 2)
                     .onEnded { _ in
@@ -100,7 +121,7 @@ struct GroupsListView: View {
             })
             .onCommand(#selector(NSResponder.insertBacktab(_:)), perform: {})
             .onCommand(#selector(NSResponder.selectAll(_:)), perform: {
-              selectionManager.selections = Set(publisher.data.map(\.id))
+              selectionManager.publish(Set(publisher.data.map(\.id)))
             })
             .onMoveCommand(perform: { direction in
               if let elementID = selectionManager.handle(
@@ -116,15 +137,14 @@ struct GroupsListView: View {
             }
           }
           .onAppear {
-            let match = selectionManager.lastSelection ?? selectionManager.selections.first ?? ""
-            focus = .element(match)
-            DispatchQueue.main.async {
-              proxy.scrollTo(match)
-            }
+            guard let initialSelection = selectionManager.initialSelection else { return }
+            focus = .element(initialSelection)
+            proxy.scrollTo(initialSelection)
           }
-          .focusSection()
           .focused(appFocus, equals: .groups)
           .padding(.horizontal, 8)
+          .opacity(!publisher.data.isEmpty ? 1 : 0)
+          .frame(height: !publisher.data.isEmpty ? nil : 0)
         }
       }
     }
@@ -133,7 +153,7 @@ struct GroupsListView: View {
   private func onTap(_ element: GroupViewModel) {
     selectionManager.handleOnTap(publisher.data, element: element)
     confirmDelete = nil
-    debounceSelectionManager.process(.init(groups: selectionManager.selections))
+    debounce.process(.init(groups: selectionManager.selections))
   }
 
   func confirmDeleteView(_ group: GroupViewModel) -> some View {

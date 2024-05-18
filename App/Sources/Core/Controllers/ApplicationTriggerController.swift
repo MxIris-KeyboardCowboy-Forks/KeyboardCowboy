@@ -1,8 +1,9 @@
 import Combine
 import Cocoa
+import MachPort
 
-final class ApplicationTriggerController {
-  private let commandRunner: CommandRunning
+final class ApplicationTriggerController: @unchecked Sendable, ApplicationCommandRunnerDelegate {
+  private let workflowRunner: WorkflowRunning
   private var activateActions = [String: [Workflow]]()
   private var bundleIdentifiers = [String]()
   private var closeActions = [String: [Workflow]]()
@@ -10,9 +11,11 @@ final class ApplicationTriggerController {
   private var openActions = [String: [Workflow]]()
   private var runningApplicationsSubscription: AnyCancellable?
   private var workflowGroupsSubscription: AnyCancellable?
+  private var resignActions = [String: [Workflow]]()
+  private var previousApplication: UserSpace.Application?
 
-  init(_ commandRunner: CommandRunning) {
-    self.commandRunner = commandRunner
+  init(_ workflowRunner: WorkflowRunning) {
+    self.workflowRunner = workflowRunner
   }
 
   func subscribe(to publisher: Published<[UserSpace.Application]>.Publisher) {
@@ -22,7 +25,9 @@ final class ApplicationTriggerController {
 
   func subscribe(to publisher: Published<UserSpace.Application>.Publisher) {
     frontmostApplicationSubscription = publisher
-      .sink { [weak self] in self?.process($0) }
+      .sink { [weak self] in
+        self?.process($0)
+      }
   }
 
   func subscribe(to publisher: Published<[WorkflowGroup]>.Publisher) {
@@ -32,6 +37,8 @@ final class ApplicationTriggerController {
   // MARK: Private methods
 
   private func receive(_ groups: [WorkflowGroup]) {
+    self.activateActions.removeAll()
+    self.resignActions.removeAll()
     self.openActions.removeAll()
     self.closeActions.removeAll()
     self.activateActions.removeAll()
@@ -53,19 +60,26 @@ final class ApplicationTriggerController {
           if trigger.contexts.contains(.frontMost) {
             self.activateActions[trigger.application.bundleIdentifier, default: []].append(workflow)
           }
+
+          if trigger.contexts.contains(.resignFrontMost) {
+            self.resignActions[trigger.application.bundleIdentifier, default: []].append(workflow)
+          }
         }
-      case .keyboardShortcuts, .none:
-        break
+      case .keyboardShortcuts, .snippet, .none:
+        return
       }
     }
   }
 
   private func process(_ frontMostApplication: UserSpace.Application) {
-    guard let workflows = self.activateActions[frontMostApplication.bundleIdentifier] else { return }
-
-    for workflow in workflows {
-      runCommands(in: workflow)
+    if let workflows = self.activateActions[frontMostApplication.bundleIdentifier] {
+      workflows.forEach(workflowRunner.runCommands(in:))
     }
+
+    if let previousApplication, let workflows = self.resignActions[previousApplication.bundleIdentifier] {
+      workflows.forEach(workflowRunner.runCommands(in:))
+    }
+    previousApplication = frontMostApplication
   }
 
   private func process(_ bundleIdentifiers: [String]) {
@@ -87,26 +101,22 @@ final class ApplicationTriggerController {
       }
     }
 
-    workflows.forEach { runCommands(in: $0) }
+    workflows.forEach(workflowRunner.runCommands(in:))
 
     self.bundleIdentifiers = bundleIdentifiers
   }
 
-  private func runCommands(in workflow: Workflow) {
-    let commands = workflow.commands.filter(\.isEnabled)
-    switch workflow.execution {
-    case .concurrent:
-      commandRunner.concurrentRun(
-        commands,
-        checkCancellation: true,
-        resolveUserEnvironment: workflow.resolveUserEnvironment()
-      )
-    case .serial:
-      commandRunner.serialRun(
-        commands,
-        checkCancellation: true,
-        resolveUserEnvironment: workflow.resolveUserEnvironment()
-      )
+  // MARK: ApplicationCommandRunnerDelegate
+
+  func applicationCommandRunnerWillRunApplicationCommand(_ command: ApplicationCommand) {
+    switch command.action {
+    case .open:
+      if let previousApplication, let workflows = self.resignActions[previousApplication.bundleIdentifier] {
+        workflows.forEach(workflowRunner.runCommands(in:))
+      }
+    default:
+      break
     }
+
   }
 }

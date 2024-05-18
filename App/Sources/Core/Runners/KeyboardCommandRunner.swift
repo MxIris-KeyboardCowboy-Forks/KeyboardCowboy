@@ -10,7 +10,7 @@ enum KeyboardCommandRunnerError: Error {
   case failedToCreateEvent
 }
 
-final class KeyboardCommandRunner {
+final class KeyboardCommandRunner: @unchecked Sendable {
   var machPort: MachPortEventController?
   let store: KeyCodesStore
 
@@ -22,14 +22,18 @@ final class KeyboardCommandRunner {
     store.virtualKey(for: string, modifiers: modifiers, matchDisplayValue: matchDisplayValue)
   }
 
+  @discardableResult
   func run(_ keyboardShortcuts: [KeyShortcut],
-           type: CGEventType,
-           originalEvent: CGEvent?,
-           with eventSource: CGEventSource?) throws {
+           originalEvent: CGEvent? = nil,
+           isRepeating: Bool = false,
+           with eventSource: CGEventSource?) throws -> [CGEvent] {
     guard let machPort else {
       throw KeyboardCommandRunnerError.failedToResolveMachPortController
     }
 
+    let isRepeat = originalEvent?.getIntegerValueField(.keyboardEventAutorepeat) == 1
+
+    var events = [CGEvent]()
     for keyboardShortcut in keyboardShortcuts {
       let key = try resolveKey(for: keyboardShortcut.key)
       var flags = CGEventFlags()
@@ -44,16 +48,32 @@ final class KeyboardCommandRunner {
           flags.insert(.maskNumericPad)
         }
 
-        try machPort.post(key, type: type, flags: flags) { newEvent in
+        let configureEvent: (CGEvent) -> Void = { newEvent in
           if let originalEvent {
             let originalKeyboardEventAutorepeat = originalEvent.getIntegerValueField(.keyboardEventAutorepeat)
             newEvent.setIntegerValueField(.keyboardEventAutorepeat, value: originalKeyboardEventAutorepeat)
+          } else if isRepeating {
+            newEvent.setIntegerValueField(.keyboardEventAutorepeat, value: 1)
           }
+        }
+
+        let shouldPostKeyDown = originalEvent == nil || originalEvent?.type == .keyDown
+        let shouldPostKeyUp = originalEvent == nil   || (!isRepeat && originalEvent?.type == .keyUp)
+
+        if shouldPostKeyDown {
+          let keyDown = try machPort.post(key, type: .keyDown, flags: flags, configure: configureEvent)
+          events.append(keyDown)
+        }
+
+        if shouldPostKeyUp {
+          let keyUp = try machPort.post(key, type: .keyUp, flags: flags, configure: configureEvent)
+          events.append(keyUp)
         }
       } catch let error {
         throw error
       }
     }
+    return events
   }
 
   // MARK: Private methods

@@ -1,21 +1,45 @@
 import Bonzai
-import Inject
 import SwiftUI
 
-@MainActor
 struct ContentItemView: View {
-  @ObserveInjection var inject
   private let contentSelectionManager: SelectionManager<ContentViewModel>
-  @State var isHovered: Bool = false
-  @State var isTargeted: Bool = false
   private let publisher: ContentPublisher
   private let workflow: ContentViewModel
-  private let onAction: (ContentListView.Action) -> Void
+  private let onAction: (ContentView.Action) -> Void
 
   init(workflow: ContentViewModel,
        publisher: ContentPublisher,
        contentSelectionManager: SelectionManager<ContentViewModel>,
-       onAction: @escaping (ContentListView.Action) -> Void) {
+       onAction: @escaping (ContentView.Action) -> Void) {
+    self.contentSelectionManager = contentSelectionManager
+    self.workflow = workflow
+    self.publisher = publisher
+    self.onAction = onAction
+  }
+
+  var body: some View {
+    ContentItemInternalView(
+      workflow: workflow,
+      publisher: publisher,
+      contentSelectionManager: contentSelectionManager,
+      onAction: onAction
+    )
+  }
+}
+
+private struct ContentItemInternalView: View {
+  @State private var isHovered: Bool = false
+  @State private var isSelected: Bool = false
+
+  private let contentSelectionManager: SelectionManager<ContentViewModel>
+  private let publisher: ContentPublisher
+  private let workflow: ContentViewModel
+  private let onAction: (ContentView.Action) -> Void
+
+  init(workflow: ContentViewModel,
+       publisher: ContentPublisher,
+       contentSelectionManager: SelectionManager<ContentViewModel>,
+       onAction: @escaping (ContentView.Action) -> Void) {
     self.contentSelectionManager = contentSelectionManager
     self.workflow = workflow
     self.publisher = publisher
@@ -38,6 +62,9 @@ struct ContentItemView: View {
                                       badgeOpacity: workflow.badgeOpacity)
           .offset(x: 4, y: 0)
         })
+        .overlay(alignment: .topLeading) {
+          ContentExecutionView(execution: workflow.execution)
+        }
         .fixedSize()
         .frame(width: 32, height: 32)
         .onHover { newValue in
@@ -51,32 +78,96 @@ struct ContentItemView: View {
         .allowsTightening(true)
         .frame(maxWidth: .infinity, alignment: .leading)
 
-      if let binding = workflow.binding {
-        KeyboardShortcutView(shortcut: .init(key: binding, lhs: true, modifiers: []))
-          .fixedSize()
-          .font(.caption)
-          .lineLimit(1)
-          .allowsTightening(true)
-          .frame(minWidth: 32, alignment: .trailing)
-      }
+      ContentItemAccessoryView(workflow: workflow)
     }
     .padding(4)
-    .background(FillBackgroundView(isSelected: .readonly(contentSelectionManager.selections.contains(workflow.id))))
-    .draggable(getDraggable())
-    .dropDestination(String.self, color: .accentColor) { items, location in
-      guard let payload = items.draggablePayload(prefix: "W|"),
-            let (from, destination) = publisher.data.moveOffsets(for: workflow, with: payload) else {
-        return false
+    .background(ItemBackgroundView(workflow.id, selectionManager: contentSelectionManager))
+    .draggable(workflow)
+  }
+}
+
+private struct ContentExecutionView: View {
+  let execution: ContentViewModel.Execution
+  var body: some View {
+    Group {
+      switch execution {
+      case .concurrent:
+        EmptyView()
+      case .serial:
+        Image(systemName: "square.3.layers.3d.top.filled")
+          .resizable()
+          .background(
+            Circle()
+              .fill(Color.accentColor)
+          )
+          .compositingGroup()
+          .shadow(color: .black.opacity(0.75), radius: 2)
       }
-      withAnimation(.spring(response: 0.3, dampingFraction: 0.65, blendDuration: 0.2)) {
-        publisher.data.move(fromOffsets: IndexSet(from), toOffset: destination)
-      }
-      onAction(.reorderWorkflows(source: from, destination: destination))
-      return true
     }
+    .aspectRatio(contentMode: .fit)
+    .frame(width: 12, height: 12)
+  }
+}
+
+struct ItemBackgroundView<T: Hashable & Identifiable>: View where T.ID == String {
+  private let id: T.ID
+  @ObservedObject private var selectionManager: SelectionManager<T>
+
+  init(_ id: T.ID, selectionManager: SelectionManager<T>) {
+    self.id = id
+    self.selectionManager = selectionManager
   }
 
-  func getDraggable() -> String {
-    return workflow.draggablePayload(prefix: "W|", selections: contentSelectionManager.selections)
+  var body: some View {
+    FillBackgroundView(
+      isSelected: Binding<Bool>.readonly(selectionManager.selections.contains(id))
+    )
   }
+}
+
+private struct ContentItemAccessoryView: View {
+  let workflow: ContentViewModel
+
+  @ViewBuilder
+  var body: some View {
+    switch workflow.trigger {
+    case .application:
+      GenericAppIconView(size: 16)
+    case .keyboard(let binding):
+      KeyboardShortcutView(shortcut: .init(key: binding, lhs: true, modifiers: []))
+        .fixedSize()
+        .font(.footnote)
+        .lineLimit(1)
+        .allowsTightening(true)
+        .frame(minWidth: 32, alignment: .trailing)
+    case .snippet(let snippet):
+      HStack(spacing: 1) {
+        Text(snippet)
+          .font(.footnote)
+        SnippetIconView(size: 12)
+      }
+      .lineLimit(1)
+      .allowsTightening(true)
+      .truncationMode(.tail)
+      .padding(1)
+      .overlay(
+        RoundedRectangle(cornerRadius: 4)
+          .stroke(Color(.separatorColor), lineWidth: 1)
+      )
+    case .none:
+      EmptyView()
+    }
+  }
+}
+
+#Preview {
+  ForEach(DesignTime.contentPublisher.data) { workflow in
+    ContentItemView(
+      workflow: workflow,
+      publisher: DesignTime.contentPublisher,
+      contentSelectionManager: SelectionManager<ContentViewModel>()
+    ) { _ in }
+  }
+
+  .designTime()
 }

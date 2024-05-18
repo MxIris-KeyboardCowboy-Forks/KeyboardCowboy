@@ -17,10 +17,8 @@ struct NewCommandScriptView: View {
 
     var displayName: String {
       switch self {
-      case .shellScript:
-        return "Shellscript"
-      case .appleScript:
-        return "AppleScript"
+      case .shellScript: "Shellscript"
+      case .appleScript: "AppleScript"
       }
     }
   }
@@ -60,6 +58,7 @@ struct NewCommandScriptView: View {
       }
 
       HStack {
+        ScriptIconView(size: 24)
         Menu(content: {
           ForEach(ScriptExtension.allCases) { scriptExtension in
             Button(action: { self.scriptExtension = scriptExtension }, label: {

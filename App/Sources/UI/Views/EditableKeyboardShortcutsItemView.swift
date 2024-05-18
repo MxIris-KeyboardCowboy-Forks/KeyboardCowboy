@@ -3,13 +3,61 @@ import Inject
 import SwiftUI
 
 struct EditableKeyboardShortcutsItemView: View {
-  @ObserveInjection var inject
-  @State var isHovered: Bool = false
-  @State var isTargeted: Bool = false
-  let keyboardShortcut: Binding<KeyShortcut>
-  @Binding var keyboardShortcuts: [KeyShortcut]
-  let selectionManager: SelectionManager<KeyShortcut>
-  let onDelete: (KeyShortcut) -> Void
+  enum Feature {
+    case record
+    case remove
+  }
+
+  @Binding private var keyboardShortcuts: [KeyShortcut]
+
+  private let features: Set<Feature>
+  private let keyboardShortcut: Binding<KeyShortcut>
+  private let selectionManager: SelectionManager<KeyShortcut>
+  private let onDelete: (KeyShortcut) -> Void
+
+  init(keyboardShortcut: Binding<KeyShortcut>,
+       keyboardShortcuts: Binding<[KeyShortcut]>,
+       features: Set<Feature>,
+       selectionManager: SelectionManager<KeyShortcut>,
+       onDelete: @escaping (KeyShortcut) -> Void) {
+    _keyboardShortcuts = keyboardShortcuts
+    self.keyboardShortcut = keyboardShortcut
+    self.selectionManager = selectionManager
+    self.onDelete = onDelete
+    self.features = features
+  }
+
+  var body: some View {
+    EditableKeyboardShortcutsItemInternalView(
+      keyboardShortcuts: $keyboardShortcuts,
+      keyboardShortcut: keyboardShortcut,
+      features: features,
+      selectionManager: selectionManager,
+      onDelete: onDelete
+    )
+  }
+}
+
+private struct EditableKeyboardShortcutsItemInternalView: View {
+  @Binding private var keyboardShortcuts: [KeyShortcut]
+
+  @State private var isHovered: Bool = false
+  @State private var isTargeted: Bool = false
+
+  private let features: Set<EditableKeyboardShortcutsItemView.Feature>
+  private let keyboardShortcut: Binding<KeyShortcut>
+  private let selectionManager: SelectionManager<KeyShortcut>
+  private let onDelete: (KeyShortcut) -> Void
+
+  init(keyboardShortcuts: Binding<[KeyShortcut]>, keyboardShortcut: Binding<KeyShortcut>,
+       features: Set<EditableKeyboardShortcutsItemView.Feature>,
+       selectionManager: SelectionManager<KeyShortcut>, onDelete: @escaping (KeyShortcut) -> Void) {
+    _keyboardShortcuts = keyboardShortcuts
+    self.features = features
+    self.keyboardShortcut = keyboardShortcut
+    self.selectionManager = selectionManager
+    self.onDelete = onDelete
+  }
 
   var body: some View {
     HStack(spacing: 6) {
@@ -17,11 +65,11 @@ struct EditableKeyboardShortcutsItemView: View {
         ModifierKeyIcon(
           key: modifier,
           alignment: keyboardShortcut.wrappedValue.lhs
-          ? modifier == .shift ? .bottomLeading : .topTrailing
-          : modifier == .shift ? .bottomTrailing : .topLeading,
+          ? modifier == .capsLock ? .bottomLeading : modifier == .shift ? .bottomLeading : .topTrailing
+          : modifier == .capsLock ? .bottomLeading : modifier == .shift ? .bottomTrailing : .topLeading,
           glow: .constant(false)
         )
-        .frame(minWidth: modifier == .command || modifier == .shift ? 40 : 30, minHeight: 30)
+        .frame(minWidth: modifier == .command || modifier == .shift || modifier == .capsLock ? 40 : 30, minHeight: 30)
         .fixedSize(horizontal: true, vertical: true)
       }
       RegularKeyIcon(letter: keyboardShortcut.wrappedValue.key, width: 30, height: 30, glow: .constant(false))
@@ -29,7 +77,7 @@ struct EditableKeyboardShortcutsItemView: View {
     }
     .contentShape(Rectangle())
     .padding(2)
-    .overlay(BorderedOverlayView(cornerRadius: 4))
+    .overlay(BorderedOverlayView(.readonly(selectionManager.selections.contains(keyboardShortcut.wrappedValue.id)), cornerRadius: 4))
     .overlay(alignment: .topTrailing, content: {
       Button(action: {
         onDelete(keyboardShortcut.wrappedValue)
@@ -41,7 +89,7 @@ struct EditableKeyboardShortcutsItemView: View {
       })
       .buttonStyle(.borderless)
       .scaleEffect(isHovered ? 1 : 0.5)
-      .opacity(isHovered ? 1 : 0)
+      .opacity(isHovered && features.contains(.remove) ? 1 : 0)
       .animation(.smooth, value: isHovered)
     })
     .background(
@@ -50,32 +98,18 @@ struct EditableKeyboardShortcutsItemView: View {
         .opacity(0.5)
     )
     .padding(.horizontal, 2)
-    .draggable(keyboardShortcut.draggablePayload(prefix: "WKS|", selections: selectionManager.selections))
-    .dropDestination(for: String.self) { items, location in
-      guard let payload = items.draggablePayload(prefix: "WKS|"),
-            let (from, destination) = keyboardShortcuts.moveOffsets(for: keyboardShortcut.wrappedValue,
-                                                                    with: payload) else {
-        return false
-      }
-      withAnimation(.spring(response: 0.3, dampingFraction: 0.65, blendDuration: 0.2)) {
-        keyboardShortcuts.move(fromOffsets: IndexSet(from), toOffset: destination)
-      }
-      return true
-    } isTargeted: { newValue in
-      isTargeted = newValue
-    }
     .onHover(perform: { hovering in
       isHovered = hovering
     })
-    .enableInjection()
   }
 }
 
 struct EditableKeyboardShortcutsItemView_Previews: PreviewProvider {
     static var previews: some View {
       EditableKeyboardShortcutsItemView(
-        keyboardShortcut: .constant(.init(key: UUID().uuidString, lhs: true)),
+        keyboardShortcut: .constant(.init(key: "Caps Lock", lhs: true, modifiers: [.capsLock])),
         keyboardShortcuts: .constant([]),
+        features: [.remove],
         selectionManager: .init(), onDelete: { _ in })
       .padding()
     }

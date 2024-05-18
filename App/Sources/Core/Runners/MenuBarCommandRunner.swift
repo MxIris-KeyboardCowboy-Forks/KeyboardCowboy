@@ -9,19 +9,49 @@ enum MenuBarCommandRunnerError: Error {
 
 @MainActor
 final class MenuBarCommandRunner {
+
+  private var previousMatch: MenuBarItemAccessibilityElement?
+
   nonisolated init() { }
 
-  func execute(_ command: MenuBarCommand) async throws {
-    guard let frontmostApplication = NSWorkspace.shared.frontmostApplication else {
+  func execute(_ command: MenuBarCommand, repeatingEvent: Bool) async throws {
+    if repeatingEvent, let previousMatch {
+      previousMatch.performAction(.pick)
+      return
+    } else {
+      previousMatch = nil
+    }
+
+    var runningApplication: NSRunningApplication?
+    if let application = command.application {
+      if let match = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == application.id }) {
+        runningApplication = match
+      } else {
+        NSWorkspace.shared.open(URL(filePath: application.path))
+        try await Task.sleep(for: .seconds(0.1))
+      }
+    } else {
+      runningApplication = NSWorkspace.shared.frontmostApplication
+    }
+
+    guard let runningApplication else {
       throw MenuBarCommandRunnerError.failedToFindFrontmostApplication
     }
 
-    let menuItems = try AppAccessibilityElement(frontmostApplication.processIdentifier)
+    if runningApplication.processIdentifier != NSWorkspace.shared.frontmostApplication?.processIdentifier {
+      runningApplication.activate()
+    }
+
+    let menuItems = try AppAccessibilityElement(runningApplication.processIdentifier)
       .menuBar()
       .menuItems()
     let match = try recursiveSearch(command.tokens, items: menuItems)
 
     match.performAction(.pick)
+
+    if repeatingEvent {
+      previousMatch = match
+    }
   }
 
   private func recursiveSearch(_ tokens: [MenuBarCommand.Token],
