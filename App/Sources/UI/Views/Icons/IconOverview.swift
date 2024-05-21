@@ -6,6 +6,7 @@ struct IconOverview: PreviewProvider {
   static let spacing: CGFloat = 16
   static var previews: some View {
     FlowLayout(itemSpacing: spacing, lineSpacing: spacing) {
+      TriggersIconView(size: size)
       WindowManagementIconView(size: size)
       ActivateLastApplicationIconView(size: size)
       RelativeFocusIconView(.up, size: size)
@@ -15,6 +16,7 @@ struct IconOverview: PreviewProvider {
       MoveFocusToWindowIconView(direction: .next, scope: .allWindows, size: size)
       UserModeIconView(size: size)
       UIElementIconView(size: size)
+      PrivacyIconView(size: size)
       EnvironmentIconView(size: size)
       MouseIconView(size: size)
       BugFixIconView(size: size)
