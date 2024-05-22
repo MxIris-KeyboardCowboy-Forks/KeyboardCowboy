@@ -3,12 +3,13 @@ import Cocoa
 extension KeyboardCowboy {
   static let mainWindowIdentifier = "MainWindow"
   static let permissionsSettingsWindowIdentifier = "PermissionsSettingsWindow"
+  static let emptyConfigurationWindowIdentifier = "EmptyConfigurationWindow"
   static let permissionsWindowIdentifier = "PermissionsWindow"
   static let releaseNotesWindowIdentifier = "ReleaseNotesWindow"
 
   static var bundleIdentifier: String { Bundle.main.bundleIdentifier! }
 
-  static var marektingVersion: String {
+  static var marketingVersion: String {
     Bundle.main.infoDictionary!["CFBundleShortVersionString"] as! String
   }
 

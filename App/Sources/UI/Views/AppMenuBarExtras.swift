@@ -5,6 +5,7 @@ struct AppMenuBarExtras: Scene {
   enum Action {
     case onAppear
     case openMainWindow
+    case openEmptyConfigurationWindow
     case reveal
   }
 
@@ -19,11 +20,13 @@ struct AppMenuBarExtras: Scene {
     }
   }
 
+  private let contentStore: ContentStore
   private let onAction: (Action) -> Void
   private let pub = NotificationCenter.default
     .publisher(for: NSNotification.Name("OpenMainWindow"))
 
-  init(onAction: @escaping (Action) -> Void) {
+  init(contentStore: ContentStore, onAction: @escaping (Action) -> Void) {
+    self.contentStore = contentStore
     self.onAction = onAction
   }
 
@@ -34,7 +37,7 @@ struct AppMenuBarExtras: Scene {
       Divider()
       HelpMenu()
       Divider()
-      Text("Version: \(KeyboardCowboy.marektingVersion) (\(KeyboardCowboy.buildNumber))")
+      Text("Version: \(KeyboardCowboy.marketingVersion) (\(KeyboardCowboy.buildNumber))")
 #if DEBUG
       Button(action: { onAction(.reveal) }, label: {
         Text("Reveal")
@@ -53,6 +56,11 @@ struct AppMenuBarExtras: Scene {
           onAction(.openMainWindow)
           UserSpace.Application.current.ref.activate(options: .activateAllWindows)
         })
+        .onChange(of: contentStore.state) { newValue in
+          if newValue == .noConfiguration {
+            onAction(.openEmptyConfigurationWindow)
+          }
+        }
     }
   }
 }
