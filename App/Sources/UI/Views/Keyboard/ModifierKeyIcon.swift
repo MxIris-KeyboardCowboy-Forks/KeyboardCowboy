@@ -1,7 +1,10 @@
+import Inject
 import SwiftUI
 
 struct ModifierKeyIcon: View {
+  @ObserveInjection var inject
   @Environment(\.colorScheme) var colorScheme
+  let glowColor: Color
   let key: ModifierKey
   let alignment: Alignment
   @Binding var glow: Bool
@@ -12,16 +15,27 @@ struct ModifierKeyIcon: View {
 
   init(key: ModifierKey, 
        alignment: Alignment? = nil,
+       glowColor: Color = Color(.systemGreen),
        glow: Binding<Bool> = .constant(false)) {
     self.key = key
+    self.glowColor = glowColor
     _glow = glow
 
     if let alignment = alignment {
       self.alignment = alignment
     } else {
-      self.alignment = key == .capsLock ? .bottomLeading
-        : key == .shift
-        ? .bottomLeading : .topTrailing
+      self.alignment = switch key {
+      case .leftShift:    .bottomLeading
+      case .leftControl:  .topTrailing
+      case .leftOption:   .topTrailing
+      case .leftCommand:  .topTrailing
+      case .rightShift:   .bottomTrailing
+      case .rightControl: .topLeading
+      case .rightOption:  .topLeading
+      case .rightCommand: .topLeading
+      case .function:     .topTrailing
+      case .capsLock:     .bottomLeading
+      }
     }
   }
 
@@ -30,9 +44,9 @@ struct ModifierKeyIcon: View {
       ZStack {
         KeyBackgroundView(isPressed: .constant(false), height: proxy.size.height)
           .background(
-            RoundedRectangle(cornerRadius: proxy.size.height * 0.1)
+            RoundedRectangle(cornerRadius: proxy.size.height * 0.2)
               .stroke(glow
-                      ? Color(.systemRed) .opacity(0.5)
+                      ? glowColor .opacity(0.5)
                       : Color.clear, lineWidth: 2)
               .padding(-2)
           )
@@ -77,6 +91,7 @@ struct ModifierKeyIcon: View {
         }
       }
     }
+    .enableInjection()
   }
 }
 
@@ -89,7 +104,7 @@ struct ModifierKeyIcon_Previews: PreviewProvider {
         ModifierKeyIcon(key: modifier)
           .frame(width: {
             switch modifier {
-            case .command, .shift, .capsLock:
+            case .leftCommand, .rightCommand, .leftShift, .rightShift, .capsLock:
               return size * 1.5
             default:
               return size

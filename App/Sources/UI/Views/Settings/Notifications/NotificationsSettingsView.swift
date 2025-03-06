@@ -1,7 +1,9 @@
 import Bonzai
+import Inject
 import SwiftUI
 
 struct NotificationsSettingsView: View {
+  @ObserveInjection var inject
   @AppStorage("Notifications.KeyboardCommands") var keyboardCommands: Bool = false
   @AppStorage("Notifications.RunningWorkflows") var runningWorkflows: Bool = false
   @AppStorage("Notifications.Bundles") var bundles: Bool = false
@@ -19,95 +21,84 @@ struct NotificationsSettingsView: View {
               .font(.caption2)
           })
           .overlay(alignment: .topLeading) {
-            ZenCheckbox(config: .init(color: .accentColor), isOn: Binding(get: {
+            Toggle(isOn: Binding(get: {
               notificationPlacement == .topLeading
             }, set: { _ in
               notificationPlacement = .topLeading
-            }))
-              .padding(8)
+            }), label: {})
           }
-
           .overlay(alignment: .top) {
-            ZenCheckbox(config: .init(color: .accentColor), isOn: Binding(get: { 
+            Toggle(isOn: Binding(get: {
               notificationPlacement == .top
             }, set: { _ in
               notificationPlacement = .top
-            }))
-              .padding(8)
+            }), label: {})
           }
-
           .overlay(alignment: .topTrailing) {
-            ZenCheckbox(config: .init(color: .accentColor), isOn: Binding(get: {
+            Toggle(isOn: Binding(get: {
               notificationPlacement == .topTrailing
             }, set: { _ in
               notificationPlacement = .topTrailing
-            }))
-              .padding(8)
+            }), label: {})
           }
 
           .overlay(alignment: .leading) {
-            ZenCheckbox(config: .init(color: .accentColor), isOn: Binding(get: {
+            Toggle(isOn: Binding(get: {
               notificationPlacement == .leading
             }, set: { _ in
               notificationPlacement = .leading
-            }))
-              .padding(8)
+            }), label: {})
           }
 
           .overlay(alignment: .trailing) {
-            ZenCheckbox(config: .init(color: .accentColor), isOn: Binding(get: {
+            Toggle(isOn: Binding(get: {
               notificationPlacement == .trailing
             }, set: { _ in
               notificationPlacement = .trailing
-            }))
-              .padding(8)
+            }), label: {})
           }
 
           .overlay(alignment: .bottomLeading) {
-            ZenCheckbox(config: .init(color: .accentColor), isOn: Binding(get: {
+            Toggle(isOn: Binding(get: {
               notificationPlacement == .bottomLeading
             }, set: { _ in
               notificationPlacement = .bottomLeading
-            }))
-              .padding(8)
+            }), label: {})
           }
 
           .overlay(alignment: .bottom) {
-            ZenCheckbox(config: .init(color: .accentColor), isOn: Binding(get: {
+            Toggle(isOn: Binding(get: {
               notificationPlacement == .bottom
             }, set: { _ in
               notificationPlacement = .bottom
-            }))
-              .padding(8)
+            }), label: {})
           }
 
           .overlay(alignment: .bottomTrailing) {
-            ZenCheckbox(config: .init(color: .accentColor), isOn: Binding(get: {
+            Toggle(isOn: Binding(get: {
               notificationPlacement == .bottomTrailing
             }, set: { _ in
               notificationPlacement = .bottomTrailing
-            }))
+            }), label: {})
               .padding(8)
           }
       }
       .frame(maxWidth: .infinity)
       .padding()
-      .roundedContainer(padding: 0)
+      .roundedStyle(padding: 0)
 
       Grid(alignment: .leading) {
         GridRow {
-          ZenToggle(isOn: $keyboardCommands)
-          Text("Keyboard Commands")
-          ZenToggle(isOn: $runningWorkflows)
-          Text("Running Workflows")
-          ZenToggle(isOn: $bundles)
-          Text("Show bundles")
+          Toggle("Keyboard Commands", isOn: $keyboardCommands)
+          Toggle("Running Workflows", isOn: $runningWorkflows)
+          Toggle("Show Bundles", isOn: $bundles)
         }
       }
       .font(.caption2)
       .padding([.horizontal])
     }
     .frame(minWidth: 480, minHeight: 280, alignment: .top)
+    .enableInjection()
   }
 
   private var gradient: LinearGradient {

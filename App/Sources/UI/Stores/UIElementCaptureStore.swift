@@ -8,7 +8,7 @@ import SwiftUI
 @MainActor
 final class UIElementCaptureStore: ObservableObject {
   private lazy var publisher = WindowBorderViewPublisher()
-  private lazy var windowCoordinator: WindowCoordinator<WindowBordersView> = WindowCoordinator(
+  private lazy var windowCoordinator: UIElementWindowCoordinator<WindowBordersView> = UIElementWindowCoordinator(
     .none,
     content: WindowBordersView(publisher: self.publisher)
   )
@@ -71,7 +71,7 @@ final class UIElementCaptureStore: ObservableObject {
 
   func stopCapturing() {
     coordinator?.stopCapturingUIElement()
-    UserModesBezelController.shared.hide()
+    UserModeWindow.shared.show([])
     windowCoordinator.close()
     capturedElement = nil
 
@@ -85,7 +85,7 @@ final class UIElementCaptureStore: ObservableObject {
     } else {
       windowCoordinator.show()
       coordinator?.captureUIElement()
-      UserModesBezelController.shared.show([
+      UserModeWindow.shared.show([
         .init(id: UUID().uuidString, name: "Capturing UI Element", isEnabled: true)
       ])
     }
@@ -153,7 +153,8 @@ final class UIElementCaptureStore: ObservableObject {
           identifier: element.identifier,
           title: element.title,
           value: element.value,
-          role: element.role
+          role: element.role,
+          subrole: element.subrole
         )
         self.capturedElement = capturedElement
 
@@ -175,6 +176,7 @@ struct UIElementCaptureItem {
   let title: String?
   let value: String?
   let role: String?
+  let subrole: String?
 }
 
 final class WindowBorderViewPublisher: ObservableObject {
@@ -214,7 +216,7 @@ struct WindowBordersView: View {
 }
 
 @MainActor
-final class WindowCoordinator<Content> where Content: View {
+final class UIElementWindowCoordinator<Content> where Content: View {
   private let controller: NSWindowController
 
   init(_ animationBehavior: NSWindow.AnimationBehavior, content: @escaping @autoclosure () -> Content) {

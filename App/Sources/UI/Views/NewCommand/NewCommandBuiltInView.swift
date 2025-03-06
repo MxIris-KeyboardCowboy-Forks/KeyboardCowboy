@@ -20,55 +20,48 @@ struct NewCommandBuiltInView: View {
       ZenLabel("Built-In Commands")
         .frame(maxWidth: .infinity, alignment: .leading)
       HStack {
-        switch kindSelection {
-          case .macro(let macroAction):
-            switch macroAction.kind {
-              case .record:
-                MacroIconView(.record, size: 24)
-              case .remove:
-                MacroIconView(.remove, size: 24)
-            }
-          case .userMode:
-            let path = Bundle.main.bundleURL.path
-            IconView(icon: .init(bundleIdentifier: path, path: path), size: CGSize(width: 24, height: 24))
-          case .commandLine:
-            CommandLineIconView(size: 24)
-        }
+        BuiltinIconBuilder.icon(kindSelection, size: 24)
 
         VStack {
 
           Menu {
-            Button(action: { kindSelection = .userMode(.init(id: UUID().uuidString, name: "", isEnabled: true), .toggle) },
-                   label: { Text("User Mode") })
             Button(action: { kindSelection = .commandLine(.argument(contents: "")) },
                    label: { Text("Open Command Line") })
+            Button(action: { kindSelection = .repeatLastWorkflow },
+                   label: { Text("Repeat Last Workflow") })
+            Button(action: { kindSelection = .windowSwitcher },
+                   label: { Text("Window Switcher") })
+            Text("Modes")
+              .font(.caption)
+            Button(action: { kindSelection = .userMode(.init(id: UUID().uuidString, name: "", isEnabled: true), .toggle) },
+                   label: { Text("User Mode") })
+            Text("Macros")
+              .font(.caption)
             Button(action: { kindSelection = .macro(.record) },
                    label: { Text("Record Macros") })
             Button(action: { kindSelection = .macro(.remove) },
                    label: { Text("Remove Macros") })
           } label: {
             switch kindSelection {
-              case .macro(let action):
-                switch action.kind {
-                  case .record:
-                    Text("Record Macro")
-                  case .remove:
-                    Text("Remove Macro")
-                }
-              case .userMode:
-                Text("User Mode")
-              case .commandLine:
-                Text("Open Command Line")
+            case .macro(let action):
+              switch action.kind {
+              case .record: Text("Record Macro")
+              case .remove: Text("Remove Macro")
+              }
+            case .userMode: Text("User Mode")
+            case .commandLine: Text("Open Command Line")
+            case .repeatLastWorkflow: Text("Repeat Last Command")
+            case .windowSwitcher: Text("Window Switcher")
             }
           }
         }
       }
 
       switch kindSelection {
-        case .macro, .commandLine:
-          EmptyView()
-        case .userMode:
-          userMode()
+      case .macro, .commandLine, .repeatLastWorkflow, .windowSwitcher:
+        EmptyView()
+      case .userMode:
+        userMode()
       }
     }
     .onChange(of: kindSelection, perform: { newValue in
@@ -85,7 +78,6 @@ struct NewCommandBuiltInView: View {
       validation = .needsValidation
       payload = .builtIn(builtIn: .init(kind: kindSelection, notification: nil))
     }
-    .menuStyle(.regular)
   }
 
   func userMode() -> some View {
@@ -125,15 +117,21 @@ struct NewCommandBuiltInView: View {
     let validation: Bool
     let newKind: BuiltInCommand.Kind
     switch kindSelection {
-      case .macro(let action):
-        validation = true
-        newKind = .macro(action)
-      case .userMode(_, let action):
-        validation = !userModeSelection.name.isEmpty
-        newKind = .userMode(userModeSelection, action)
-      case .commandLine(let action):
-        validation = true
-        newKind = .commandLine(action)
+    case .macro(let action):
+      validation = true
+      newKind = .macro(action)
+    case .userMode(_, let action):
+      validation = !userModeSelection.name.isEmpty
+      newKind = .userMode(userModeSelection, action)
+    case .commandLine(let action):
+      validation = true
+      newKind = .commandLine(action)
+    case .repeatLastWorkflow:
+      validation = true
+      newKind = .repeatLastWorkflow
+    case .windowSwitcher:
+      validation = true
+      newKind = .windowSwitcher
     }
 
     payload = .builtIn(builtIn: .init(kind: newKind, notification: nil))

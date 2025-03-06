@@ -108,7 +108,7 @@ private struct IconOverlayView: View {
     ], startPoint: .top, endPoint: .bottom)
 
     LinearGradient(stops: [
-      .init(color: Color.clear, location: 0.8),
+      .init(color: Color.clear, location: 0.5),
       .init(color: Color(.windowBackgroundColor).opacity(0.3), location: 1.0),
     ], startPoint: .top, endPoint: .bottom)
   }
@@ -154,7 +154,6 @@ struct DebugView<Content>: View where Content: View {
       }
       .padding()
     }
-    .buttonStyle(.zen(.init(color: .systemIndigo)))
     .background(
       LinearGradient(colors: [
         Color(.black).opacity(0.8),

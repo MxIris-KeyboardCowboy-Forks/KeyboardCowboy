@@ -4,70 +4,76 @@ import Combine
 import Cocoa
 import MachPort
 
+@MainActor
 final class ApplicationTriggerControllerTests: XCTestCase {
-  func testApplicationTriggerController_frontMost() {
+  func testApplicationTriggerController_frontmost() {
     let ctx = context(.frontMost)
     let controller = ApplicationTriggerController(ctx.runner)
-    controller.subscribe(to: ctx.groupPublisher.$groups)
-    controller.subscribe(to: ctx.userSpace
-      .$frontMostApplication)
-    controller.subscribe(to: ctx.userSpace
-      .$runningApplications)
-
-    ctx.userSpace.injectFrontmostApplication(.init(ref: .current, bundleIdentifier: "com.apple.calendar", name: "Calendar", path: ""))
 
     // Run command when Finder becomes the frontmost application
     ctx.runner.concurrentRunHandler = { newCommand in
-      XCTAssertEqual(ctx.command, newCommand.first!)
+      XCTAssertEqual(ctx.command, newCommand.first)
     }
 
-    ctx.userSpace.injectFrontmostApplication(.init(ref: .current, bundleIdentifier: "com.apple.finder", name: "Finder", path: ""))
+    controller.subscribe(to: ctx.groupPublisher.$groups)
+    controller.subscribe(to: ctx.userSpace
+      .$frontmostApplication)
+    controller.subscribe(to: ctx.userSpace
+      .$runningApplications)
+
+    ctx.userSpace.injectFrontmostApplication(.init(ref: RunningApplicationMock.currentApp, bundleIdentifier: "com.apple.calendar", name: "Calendar", path: ""))
+
+
+    ctx.userSpace.injectFrontmostApplication(.init(ref: RunningApplicationMock.currentApp, bundleIdentifier: "com.apple.finder", name: "Finder", path: ""))
   }
 
   func testApplicationTriggerController_launched() {
     let ctx = context(.launched)
     let controller = ApplicationTriggerController(ctx.runner)
-    controller.subscribe(to: ctx.groupPublisher.$groups)
-    controller.subscribe(to: ctx.userSpace.$frontMostApplication)
-    controller.subscribe(to: ctx.userSpace.$runningApplications)
 
     // Run command when Finder is launched.
     ctx.runner.concurrentRunHandler = { newCommand in
-      XCTAssertEqual(ctx.command, newCommand.first!)
+      XCTAssertEqual(ctx.command, newCommand.first)
     }
 
+    controller.subscribe(to: ctx.groupPublisher.$groups)
+    controller.subscribe(to: ctx.userSpace.$frontmostApplication)
+    controller.subscribe(to: ctx.userSpace.$runningApplications)
+
     ctx.userSpace.injectRunningApplications([
-      .init(ref: .current, bundleIdentifier: "com.apple.finder", name: "Finder", path: "")
+      .init(ref: RunningApplicationMock.currentApp, bundleIdentifier: "com.apple.finder", name: "Finder", path: "")
     ])
     ctx.userSpace.injectRunningApplications([
-      .init(ref: .current, bundleIdentifier: "com.apple.calendar", name: "Calendar", path: "")
+      .init(ref: RunningApplicationMock.currentApp, bundleIdentifier: "com.apple.calendar", name: "Calendar", path: "")
     ])
   }
 
   func testApplicationTriggerController_closed() {
     let ctx = context(.closed)
     let controller = ApplicationTriggerController(ctx.runner)
-    controller.subscribe(to: ctx.groupPublisher.$groups)
-    controller.subscribe(to: ctx.userSpace
-      .$frontMostApplication)
-    controller.subscribe(to: ctx.userSpace
-      .$runningApplications)
 
     // Run command when Finder is closed.
     ctx.runner.concurrentRunHandler = { newCommand in
-      XCTAssertEqual(ctx.command, newCommand.first!)
+      XCTAssertEqual(ctx.command, newCommand.first)
     }
+
+    controller.subscribe(to: ctx.groupPublisher.$groups)
+    controller.subscribe(to: ctx.userSpace
+      .$frontmostApplication)
+    controller.subscribe(to: ctx.userSpace
+      .$runningApplications)
+
 
     ctx.userSpace.injectRunningApplications([UserSpace.Application(ref: NSRunningApplication.current, bundleIdentifier: "com.apple.finder", name: "Finder", path: "")])
     ctx.userSpace.injectRunningApplications([])
   }
 
-  private func context(_ triggerContext: ApplicationTrigger.Context) -> (
+  @MainActor private func context(_ triggerContext: ApplicationTrigger.Context) -> (
     command: Command,
     groupPublisher: WorkGroupPublisher,
     runner: WorkflowRunner,
     userSpace: UserSpace) {
-      let command = Command.text(.init(.insertText(.init("Type command.", mode: .instant))))
+      let command = Command.text(.init(.insertText(.init("Type command.", mode: .instant, actions: []))))
     let runner = WorkflowRunner(
       concurrent: { _ in fatalError("Should not be invoked yet.") },
       serial: { _ in fatalError("Should not be invoked yet.") })
@@ -88,16 +94,6 @@ final class ApplicationTriggerControllerTests: XCTestCase {
             runner,
             userSpace)
   }
-}
-
-private struct RunningApplicationMock: RunningApplication {
-  var bundleIdentifier: String?
-  var processIdentifier: pid_t = pid_t()
-  var isHidden: Bool { false }
-  func activate(options: NSApplication.ActivationOptions) -> Bool { false }
-  func terminate() -> Bool { false }
-  func hide() -> Bool { false }
-  func unhide() -> Bool { false }
 }
 
 private final class WorkGroupPublisher {
@@ -127,7 +123,7 @@ private final class WorkflowRunner: WorkflowRunning {
     }
   }
 
-  func run(_ workflow: Keyboard_Cowboy.Workflow, for shortcut: Keyboard_Cowboy.KeyShortcut, executionOverride: Keyboard_Cowboy.Workflow.Execution?, machPortEvent: MachPort.MachPortEvent, repeatingEvent: Bool) {
+  func run(_ workflow: Keyboard_Cowboy.Workflow, executionOverride: Keyboard_Cowboy.Workflow.Execution?, machPortEvent: MachPort.MachPortEvent, repeatingEvent: Bool) {
     switch executionOverride ?? workflow.execution {
     case .concurrent:
       concurrentRunHandler(workflow.commands)

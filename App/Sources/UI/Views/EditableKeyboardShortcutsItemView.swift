@@ -8,6 +8,7 @@ struct EditableKeyboardShortcutsItemView: View {
     case remove
   }
 
+  @ObserveInjection var inject
   @Binding private var keyboardShortcuts: [KeyShortcut]
 
   private let features: Set<Feature>
@@ -35,10 +36,12 @@ struct EditableKeyboardShortcutsItemView: View {
       selectionManager: selectionManager,
       onDelete: onDelete
     )
+    .enableInjection()
   }
 }
 
 private struct EditableKeyboardShortcutsItemInternalView: View {
+  @ObserveInjection var inject
   @Binding private var keyboardShortcuts: [KeyShortcut]
 
   @State private var isHovered: Bool = false
@@ -62,22 +65,22 @@ private struct EditableKeyboardShortcutsItemInternalView: View {
   var body: some View {
     HStack(spacing: 6) {
       ForEach(keyboardShortcut.wrappedValue.modifiers) { modifier in
+        let largerModifiers: [ModifierKey] = [
+          .leftCommand, .rightCommand,
+          .leftShift, .rightShift,
+          .capsLock
+        ]
         ModifierKeyIcon(
           key: modifier,
-          alignment: keyboardShortcut.wrappedValue.lhs
-          ? modifier == .capsLock ? .bottomLeading : modifier == .shift ? .bottomLeading : .topTrailing
-          : modifier == .capsLock ? .bottomLeading : modifier == .shift ? .bottomTrailing : .topLeading,
           glow: .constant(false)
         )
-        .frame(minWidth: modifier == .command || modifier == .shift || modifier == .capsLock ? 40 : 30, minHeight: 30)
+        .frame(minWidth: largerModifiers.contains(modifier) ? 40 : 30, minHeight: 30)
         .fixedSize(horizontal: true, vertical: true)
       }
       RegularKeyIcon(letter: keyboardShortcut.wrappedValue.key, width: 30, height: 30, glow: .constant(false))
         .fixedSize(horizontal: true, vertical: true)
     }
     .contentShape(Rectangle())
-    .padding(2)
-    .overlay(BorderedOverlayView(.readonly(selectionManager.selections.contains(keyboardShortcut.wrappedValue.id)), cornerRadius: 4))
     .overlay(alignment: .topTrailing, content: {
       Button(action: {
         onDelete(keyboardShortcut.wrappedValue)
@@ -93,21 +96,23 @@ private struct EditableKeyboardShortcutsItemInternalView: View {
       .animation(.smooth, value: isHovered)
     })
     .background(
-      RoundedRectangle(cornerRadius: 5, style: .continuous)
+      RoundedRectangle(cornerRadius: 6, style: .continuous)
         .stroke(Color(.disabledControlTextColor).opacity(0.6))
         .opacity(0.5)
     )
     .padding(.horizontal, 2)
+    .overlay(BorderedOverlayView(.readonly { selectionManager.selections.contains(keyboardShortcut.wrappedValue.id) }, cornerRadius: 4))
     .onHover(perform: { hovering in
       isHovered = hovering
     })
+    .enableInjection()
   }
 }
 
 struct EditableKeyboardShortcutsItemView_Previews: PreviewProvider {
     static var previews: some View {
       EditableKeyboardShortcutsItemView(
-        keyboardShortcut: .constant(.init(key: "Caps Lock", lhs: true, modifiers: [.capsLock])),
+        keyboardShortcut: .constant(.init(key: "Caps Lock", modifiers: [.capsLock])),
         keyboardShortcuts: .constant([]),
         features: [.remove],
         selectionManager: .init(), onDelete: { _ in })

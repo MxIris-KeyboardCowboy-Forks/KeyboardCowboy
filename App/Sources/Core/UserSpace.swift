@@ -5,6 +5,8 @@ import Carbon
 import Cocoa
 import Combine
 import Foundation
+import InputSources
+import KeyCodes
 import MachPort
 
 enum UserSpaceError: Error {
@@ -23,6 +25,8 @@ final class UserSpace: @unchecked Sendable {
     case `extension` = "EXTENSION"
     case selectedText = "SELECTED_TEXT"
     case pasteboard = "PASTEBOARD"
+    case lastKey = "LAST_KEY"
+    case lastKeyCode = "LAST_KEY_CODE"
 
     var asTextVariable: String { "$\(rawValue)" }
     var help: String {
@@ -35,22 +39,30 @@ final class UserSpace: @unchecked Sendable {
       case .extension: "The file extension"
       case .selectedText: "The current selected text"
       case .pasteboard: "The contents of the pasteboard"
+      case .lastKey: "The last key pressed"
+      case .lastKeyCode: "The last key code pressed"
       }
     }
   }
 
-  struct Application: @unchecked Sendable {
-    let ref: NSRunningApplication
+  struct Application: Equatable, @unchecked Sendable {
+    let ref: RunningApplication
     let bundleIdentifier: String
     let name: String
     let path: String
 
     @MainActor
-    static let current: Application = NSRunningApplication.currentAsApplication()
+    static let current: UserSpace.Application = NSRunningApplication.currentAsApplication()
+
+    static func ==(lhs: Application, rhs: Application) -> Bool {
+      lhs.bundleIdentifier == rhs.bundleIdentifier &&
+      lhs.name == rhs.name &&
+      lhs.path == rhs.path
+    }
   }
   struct Snapshot {
     let documentPath: String?
-    let frontMostApplication: Application
+    let frontmostApplication: Application
     let modes: [UserMode]
     let previousApplication: Application
     let selectedText: String
@@ -58,18 +70,19 @@ final class UserSpace: @unchecked Sendable {
     let windows: WindowStoreSnapshot
 
     init(documentPath: String? = nil,
-         frontMostApplication: Application,
+         frontmostApplication: Application,
          modes: [UserMode] = [],
          previousApplication: Application,
          selectedText: String = "",
          selections: [String] = [],
+         specialKeys: [Int] = [],
          windows: WindowStoreSnapshot = WindowStoreSnapshot(
-          frontMostApplicationWindows: [],
+          frontmostApplicationWindows: [],
           visibleWindowsInStage: [],
           visibleWindowsInSpace: []
          )) {
       self.documentPath = documentPath
-      self.frontMostApplication = frontMostApplication
+      self.frontmostApplication = frontmostApplication
       self.modes = modes
       self.previousApplication = previousApplication
       self.selectedText = selectedText
@@ -77,6 +90,7 @@ final class UserSpace: @unchecked Sendable {
       self.windows = windows
     }
 
+    @MainActor
     func interpolateUserSpaceVariables(_ value: String, runtimeDictionary: [String: String]) -> String {
       var interpolatedString = value.replacingOccurrences(of: .selectedText, with: selectedText)
 
@@ -100,7 +114,6 @@ final class UserSpace: @unchecked Sendable {
             .replacingOccurrences(of: .file, with: lastPathComponent as String)
             .replacingOccurrences(of: .filepath, with: (url.lastPathComponent as NSString).pathExtension)
             .replacingOccurrences(of: .extension, with: (url.lastPathComponent as NSString).pathExtension)
-
         }
       }
 
@@ -108,14 +121,26 @@ final class UserSpace: @unchecked Sendable {
         interpolatedString = interpolatedString.replacingOccurrences(of: .pasteboard, with: pasteboard)
       }
 
-
       for (key, value) in runtimeDictionary {
         interpolatedString = interpolatedString.replacingOccurrences(of: "$"+key, with: value)
       }
+
+      if let cgEvent = UserSpace.shared.cgEvent {
+        let keyCodes = UserSpace.shared.keyCodes
+        let specialKeys = Array(UserSpace.shared.keyCodes.specialKeys().keys)
+        let keyCode = Int(cgEvent.getIntegerValueField(.keyboardEventKeycode))
+        interpolatedString = interpolatedString.replacingOccurrences(of: .lastKeyCode, with: "\(keyCode)")
+        let modifiers = VirtualModifierKey.modifiers(for: keyCode, flags: cgEvent.flags, specialKeys: specialKeys)
+        if let displayValue = keyCodes.displayValue(for: keyCode, modifiers: modifiers) ?? keyCodes.displayValue(for: keyCode, modifiers: []) {
+          interpolatedString = interpolatedString.replacingOccurrences(of: .lastKey, with: "\(displayValue)")
+        }
+      }
+
       return interpolatedString
     }
 
-    func terminalEnvironment() -> [String: String] {
+    @MainActor
+    func terminalEnvironment() async -> [String: String] {
       var environment = ProcessInfo.processInfo.environment
       environment["TERM"] = "xterm-256color"
       environment[.selectedText] = selectedText
@@ -140,12 +165,38 @@ final class UserSpace: @unchecked Sendable {
         }
       }
 
+      if let cgEvent = UserSpace.shared.cgEvent {
+        let keyCodes = UserSpace.shared.keyCodes
+        let specialKeys = Array(UserSpace.shared.keyCodes.specialKeys().keys)
+        let keyCode = Int(cgEvent.getIntegerValueField(.keyboardEventKeycode))
+
+        environment[.lastKeyCode] = "\(keyCode)"
+
+        let modifiers = VirtualModifierKey.modifiers(for: keyCode, flags: cgEvent.flags, specialKeys: specialKeys)
+        if let displayValue = keyCodes.displayValue(for: keyCode, modifiers: modifiers) {
+          environment[.lastKey] = displayValue
+        } else if let displayValue = keyCodes.displayValue(for: keyCode, modifiers: []) {
+          environment[.lastKey] = displayValue
+        }
+      }
+
       if let pasteboard = NSPasteboard.general.string(forType: .string) {
         environment[.pasteboard] = pasteboard
       }
-      
+
       return environment
     }
+  }
+
+  static func resolveEnvironmentKeys(_ input: String) -> Set<EnvironmentKey> {
+    let parts = input.split(separator: " ").map(String.init)
+    let keys = parts.reduce(into: Set<EnvironmentKey>()) { partialResult, input in
+      let variable = String(input.dropFirst(1))
+      if let key = EnvironmentKey(rawValue: variable) {
+        partialResult.insert(key)
+      }
+    }
+    return keys
   }
 
   final class UserModesPublisher: ObservableObject {
@@ -163,44 +214,54 @@ final class UserSpace: @unchecked Sendable {
   @MainActor
   static let shared = UserSpace()
 
-  @Published private(set) var frontMostApplication: Application
+  @Published private(set) var frontmostApplication: Application
   @Published private(set) var previousApplication: Application
   @Published private(set) var runningApplications: [Application]
   public let userModesPublisher = UserModesPublisher([])
   private(set) var userModes: [UserMode] = []
+
+  @MainActor fileprivate let keyCodes: KeycodeLocating
+  fileprivate var cgEvent: CGEvent?
+
   private var frontmostApplicationSubscription: AnyCancellable?
   private var configurationSubscription: AnyCancellable?
   private var runningApplicationsSubscription: AnyCancellable?
+  private var machPortEventSubscription: AnyCancellable?
 
   var machPort: MachPortEventController?
 
   @MainActor
   private init(workspace: NSWorkspace = .shared) {
-    frontMostApplication = .current
+    frontmostApplication = .current
     previousApplication = .current
     runningApplications = [Application.current]
+    keyCodes = KeyCodesStore(InputSourceController())
 
     frontmostApplicationSubscription = workspace.publisher(for: \.frontmostApplication)
       .compactMap { $0 }
       .sink { [weak self] runningApplication in
         guard let self else { return }
-        Task {
-          await MainActor.run {
-            guard let newApplication = runningApplication.asApplication() else { return }
-            self.previousApplication = self.frontMostApplication
-            self.frontMostApplication = newApplication
-          }
+        Task { @MainActor in
+          guard let newApplication = runningApplication.asApplication() else { return }
+          self.previousApplication = self.frontmostApplication
+          self.frontmostApplication = newApplication
         }
       }
     runningApplicationsSubscription = workspace.publisher(for: \.runningApplications)
       .sink { [weak self] applications in
         guard let self else { return }
-        Task {
-          await MainActor.run {
-            let newApplications = applications.compactMap { $0.asApplication() }
-            self.runningApplications = newApplications
-          }
+        Task { @MainActor in
+          let newApplications = applications.compactMap { $0.asApplication() }
+          self.runningApplications = newApplications
         }
+      }
+  }
+
+  func subscribe(to publisher: Published<CGEvent?>.Publisher) {
+    machPortEventSubscription = publisher
+      .compactMap { $0 }
+      .sink { [weak self] event in
+        self?.cgEvent = event
       }
   }
 
@@ -210,12 +271,12 @@ final class UserSpace: @unchecked Sendable {
   }
 
   func injectFrontmostApplication(_ frontmostApplication: Application) {
-    self.frontMostApplication = frontmostApplication
+    self.frontmostApplication = frontmostApplication
   }
 #endif
 
   @MainActor
-  func snapshot(resolveUserEnvironment: Bool) async -> Snapshot {
+  func snapshot(resolveUserEnvironment: Bool, refreshWindows: Bool = false) async -> Snapshot {
     Benchmark.shared.start("snapshot: \(resolveUserEnvironment)")
     defer { Benchmark.shared.stop("snapshot: \(resolveUserEnvironment)") }
     var selections = [String]()
@@ -223,7 +284,7 @@ final class UserSpace: @unchecked Sendable {
     var selectedText: String = ""
 
     if resolveUserEnvironment,
-        let frontmostApplication = try? frontmostApplication() {
+       let frontmostApplication = try? frontmostRunningApplication() {
       if let documentPathFromAX = try? self.documentPath(for: frontmostApplication) {
         documentPath = documentPathFromAX
       } else if let bundleIdentifier = frontmostApplication.bundleIdentifier {
@@ -242,10 +303,11 @@ final class UserSpace: @unchecked Sendable {
       }
     }
 
-    let windows = WindowStore.shared.snapshot()
+    let windows = WindowStore.shared.snapshot(refresh: refreshWindows)
 
     return Snapshot(documentPath: documentPath,
-                    frontMostApplication: frontMostApplication,
+                    frontmostApplication: frontmostApplication,
+                    modes: userModes,
                     previousApplication: previousApplication,
                     selectedText: selectedText,
                     selections: selections,
@@ -256,13 +318,11 @@ final class UserSpace: @unchecked Sendable {
     configurationSubscription = publisher
       .sink { [weak self] configuration in
         guard let self = self else { return }
-        Task {
-          await MainActor.run {
-            let currentModes = configuration.userModes
-              .map { UserMode(id: $0.id, name: $0.name, isEnabled: false) }
-              .sorted(by: { $0.name < $1.name })
-            self.userModes = currentModes
-          }
+        Task { @MainActor in
+          let currentModes = configuration.userModes
+            .map { UserMode(id: $0.id, name: $0.name, isEnabled: false) }
+            .sorted(by: { $0.name < $1.name })
+          self.userModes = currentModes
         }
       }
   }
@@ -273,12 +333,12 @@ final class UserSpace: @unchecked Sendable {
 
     let active = userModes.filter(\.isEnabled)
 
-    UserModesBezelController.shared.show(active)
+    UserModeWindow.shared.show(active)
   }
 
   // MARK: - Private methods
 
-  private func frontmostApplication() throws -> NSRunningApplication {
+  private func frontmostRunningApplication() throws -> NSRunningApplication {
     guard let frontmostApplication = NSWorkspace.shared.frontmostApplication else {
       throw WindowCommandRunnerError.unableToResolveFrontmostApplication
     }
@@ -292,41 +352,52 @@ final class UserSpace: @unchecked Sendable {
 
   private func documentPath(for runningApplication: NSRunningApplication) throws -> String? {
     try currentApplication(for: runningApplication)
-      .focusedWindow()
+      .focusedWindow()?
       .document
   }
 
   private func selectedText() async throws -> String {
     let systemElement = SystemAccessibilityElement()
-    let focusedElement = try systemElement.focusedUIElement()
-    let selectedText = focusedElement.selectedText()
-    if selectedText == nil && (try? focusedElement.value(.role, as: String.self)) == "AXWebArea" {
-      // MARK: Fix this
-      // It doesn't work well in Safari.
-//      selectedText = try await selectedTextFromClipboard()
-    }
+    do {
+      let focusedElement = try systemElement.focusedUIElement()
+      var selectedText = focusedElement.selectedText()
 
-    return selectedText ?? ""
+      let clipboardValidGroups = [
+        "AXWebArea", "AXGroup"
+      ]
+
+      if selectedText == nil && clipboardValidGroups.contains(focusedElement.role ?? "") {
+        selectedText = try await selectedTextFromClipboard()
+      }
+
+      return selectedText ?? ""
+    } catch {
+      return try await selectedTextFromClipboard()
+    }
   }
 
   private func selectedTextFromClipboard() async throws -> String {
-    let originalPasteboardContents = await MainActor.run {
+    let originalPasteboardContents = await Task { @MainActor in
       NSPasteboard.general.string(forType: .string)
-    }
+    }.value
 
     _ = try? machPort?.post(kVK_ANSI_C, type: .keyDown, flags: .maskCommand)
     _ = try? machPort?.post(kVK_ANSI_C, type: .keyUp, flags: .maskCommand)
-
-    try await Task.sleep(for: .seconds(0.1))
+    try await Task.sleep(for: .milliseconds(50))
 
     guard let selectedText = NSPasteboard.general.string(forType: .string) else {
       throw NSError(domain: "com.zenangst.Keyboard-Cowboy.Userspace", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to read from clipboard."])
     }
 
-    if let originalContents = originalPasteboardContents {
-      await MainActor.run {
+    if selectedText == originalPasteboardContents {
+      return ""
+    }
+
+    if let originalPasteboardContents {
+      Task.detached { [originalPasteboardContents] in
+        try await Task.sleep(for: .seconds(0.2))
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(originalContents, forType: .string)
+        NSPasteboard.general.setString(originalPasteboardContents, forType: .string)
       }
     }
 
@@ -345,12 +416,12 @@ fileprivate struct RunningApplicationCache {
   let bundleIdentifier: String
 }
 
-fileprivate extension NSRunningApplication {
+extension RunningApplication {
   @MainActor
   static func currentAsApplication() -> UserSpace.Application {
     if let entry = UserSpace.cache[Bundle.main.bundleIdentifier!] {
       return UserSpace.Application(
-        ref: .current,
+        ref: Self.currentApp,
         bundleIdentifier: Bundle.main.bundleIdentifier!,
         name: entry.name,
         path: entry.path
@@ -358,7 +429,7 @@ fileprivate extension NSRunningApplication {
     }
 
     let userSpaceApplication: UserSpace.Application = .init(
-      ref: .current,
+      ref: Self.currentApp,
       bundleIdentifier: Bundle.main.bundleIdentifier!,
       name: Bundle.main.infoDictionary?["CFBundleName"] as? String ?? "",
       path: Bundle.main.bundlePath

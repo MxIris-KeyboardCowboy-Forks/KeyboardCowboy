@@ -10,6 +10,8 @@ import Foundation
 ///          eligable for execution.
 struct WorkflowGroup: Identifiable, Equatable, Codable, Hashable, Sendable {
   private(set) var id: String
+  var isDisabled: Bool
+  var isEnabled: Bool { !isDisabled }
   var symbol: String
   var name: String
   var color: String
@@ -31,6 +33,7 @@ struct WorkflowGroup: Identifiable, Equatable, Codable, Hashable, Sendable {
     self.rule = rule
     self.userModes = userModes
     self.workflows = workflows
+    self.isDisabled = false
   }
 
   func copy() -> Self {
@@ -43,6 +46,7 @@ struct WorkflowGroup: Identifiable, Equatable, Codable, Hashable, Sendable {
   enum CodingKeys: String, CodingKey {
     case color
     case id
+    case disabled
     case symbol
     case name
     case rule
@@ -60,6 +64,26 @@ struct WorkflowGroup: Identifiable, Equatable, Codable, Hashable, Sendable {
     self.rule = try container.decodeIfPresent(Rule.self, forKey: .rule)
     self.userModes = try container.decodeIfPresent([UserMode].self, forKey: .userModes) ?? []
     self.workflows = try container.decodeIfPresent([Workflow].self, forKey: .workflows) ?? []
+    self.isDisabled = try container.decodeIfPresent(Bool.self, forKey: .disabled) ?? false
+  }
+
+  func encode(to encoder: any Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(self.color, forKey: .color)
+    try container.encode(self.id, forKey: .id)
+    try container.encode(self.symbol, forKey: .symbol)
+    try container.encode(self.name, forKey: .name)
+    try container.encodeIfPresent(self.rule, forKey: .rule)
+    if !self.userModes.isEmpty {
+      try container.encode(self.userModes, forKey: .userModes)
+    }
+    if !self.workflows.isEmpty {
+      try container.encode(self.workflows, forKey: .workflows)
+    }
+
+    if self.isDisabled {
+      try container.encode(self.isDisabled, forKey: .disabled)
+    }
   }
 }
 
@@ -74,8 +98,7 @@ extension WorkflowGroup {
     WorkflowGroup(id: id,
           name: application.displayName,
           color: "#000",
-          rule: Rule(bundleIdentifiers: [application.bundleIdentifier],
-                     days: []),
+          rule: Rule(bundleIdentifiers: [application.bundleIdentifier]),
           workflows: [
           ])
   }
@@ -89,15 +112,14 @@ extension WorkflowGroup {
                           application.bundleIdentifier,
                           Application.music().bundleIdentifier,
                           Application.xcode().bundleIdentifier,
-                         ],
-                                    days: []),
+                         ]),
                          workflows: [
                           Workflow.designTime(nil),
                           Workflow.designTime(.application([.init(application: application)])),
                           Workflow.designTime(.keyboardShortcuts(.init(shortcuts: [
-                            .init(key: "A", lhs: true),
-                            .init(key: "B", lhs: false),
-                            .init(key: "C", lhs: true)
+                            .init(key: "A"),
+                            .init(key: "B"),
+                            .init(key: "C")
                           ])))
                          ])
   }

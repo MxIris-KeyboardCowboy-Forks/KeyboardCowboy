@@ -1,4 +1,5 @@
 import Carbon
+import Inject
 import SwiftUI
 import Bonzai
 
@@ -20,20 +21,22 @@ struct NewCommandView: View {
     }
 
     case application = "Application"
-    case menuBar = "MenuBar Command"
-    case uiElement = "UI Element Command"
+    case menuBar = "Menu Bar"
+    case uiElement = "UI Element"
     case url = "URL"
     case open = "Open"
     case keyboardShortcut = "Keyboard Shortcut"
     case shortcut = "Shortcut"
     case script = "Script"
     case text = "Text"
-    case system = "System Command"
+    case system = "System"
+    case bundled = "Prebuilt"
     case windowManagement = "Window Management"
     case mouse = "Mouse Command"
-    case builtIn = "Built-In Command"
+    case builtIn = "Built-In"
   }
 
+  @ObserveInjection var inject
   private let workflowId: Workflow.ID
   private let commandId: Command.ID?
 
@@ -42,7 +45,7 @@ struct NewCommandView: View {
   @State private var selection: Kind
   @State private var validation: NewCommandValidation
   @State private var title: String
-  @State private var saveButtonColor: ZenColor = .systemGreen
+  @State private var saveButtonColor: Color = Color(.systemGreen)
   @StateObject private var edited = Edited()
   private let onDismiss: () -> Void
   private let onSave: (NewCommandPayload, String) -> Void
@@ -70,16 +73,26 @@ struct NewCommandView: View {
     Group {
       if commandId == nil {
         HStack(spacing: 0) {
-          sidebar()
-            .padding(.top, 36)
-            .background(
-              HStack(spacing: 0) {
-                Color(.windowBackgroundColor)
-                Rectangle()
-                  .fill(Color.white.opacity(0.2))
-                  .frame(width: 1)
-              })
-            .frame(maxWidth: 235)
+          VStack(spacing: 24) {
+            Spacer(minLength: 2)
+            sidebar()
+              .style(.section(.sidebar))
+          }
+          .background(
+            HStack(spacing: 0) {
+              ZStack {
+                ZenVisualEffectView(material: .underWindowBackground, blendingMode: .behindWindow, state: .active)
+                LinearGradient(stops: [
+                  .init(color: Color(nsColor: .textBackgroundColor).opacity(0.4), location: 0),
+                  .init(color: Color(nsColor: .textBackgroundColor).opacity(0.8), location: 1)
+                ], startPoint: .top, endPoint: .bottom)
+              }
+              .ignoresSafeArea()
+              Rectangle()
+                .fill(Color.white.opacity(0.1))
+                .frame(width: 1)
+            })
+          .frame(maxWidth: 235)
           detailView
         }
       } else {
@@ -91,12 +104,14 @@ struct NewCommandView: View {
           })
       }
     }
-    .frame(minWidth: 710, minHeight: 500)
+    .frame(minWidth: 710, minHeight: 560)
+    .enableInjection()
   }
 
   private func sidebar() -> some View {
-    ScrollView(.vertical) {
-      VStack {
+    VStack {
+      ZenDivider()
+      ScrollView(.vertical) {
         ForEach(Array(zip(Kind.allCases.indices, Kind.allCases)), id: \.1) { offset, kind in
           NewCommandButtonView(content: {
             HStack {
@@ -109,12 +124,10 @@ struct NewCommandView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
               Spacer()
               if offset < 10 {
-                KeyboardIconView("\(ModifierKey.command.keyValue)\(kind.rawKey)", size: 24)
+                KeyboardIconView("\(ModifierKey.leftCommand.keyValue)\(kind.rawKey)", size: 24)
               }
+              Spacer(minLength: 16)
             }
-            .padding(.leading, 4)
-            .padding(.trailing, 18)
-            .padding(.vertical, 4)
             .background(
               Canvas(rendersAsynchronously: true) { context, size in
                 if kind == selection {
@@ -122,7 +135,7 @@ struct NewCommandView: View {
                     path.move(to: .init(x: size.width, y: 2))
                     path.addLine(to: .init(x: size.width - 12, y: size.height / 2))
                     path.addLine(to: .init(x: size.width, y: size.height - 2))
-                  }, with: .color(Color.white.opacity(0.2)), lineWidth: 2)
+                  }, with: .color(Color.white.opacity(0.1)), lineWidth: 2)
 
                   context.fill(Path { path in
                     path.move(to: .init(x: size.width, y: 2))
@@ -144,15 +157,16 @@ struct NewCommandView: View {
           }
           .keyboardShortcut(kind.key, modifiers: .command)
           .focused($focused, equals: .application)
-          .padding(.horizontal, 4)
+
+          ZenDivider()
         }
       }
-      .padding(.bottom)
     }
+    .enableInjection()
   }
 
   private var detailView: some View {
-    VStack(spacing: 0) {
+    VStack(spacing: 8) {
       TextField("", text: $title)
       .onReceive(LocalEventMonitor.shared.$event
         .compactMap { $0 }
@@ -181,7 +195,6 @@ struct NewCommandView: View {
       .opacity(controlActiveState == .key ? 1 : 0.6)
       .padding(.top, -28)
       .padding(.horizontal)
-      .textFieldStyle(.regular(Color(.windowBackgroundColor)))
       .multilineTextAlignment(.center)
       .fixedSize(horizontal: true, vertical: false)
       .onChange(of: payload, perform: { newValue in
@@ -191,29 +204,52 @@ struct NewCommandView: View {
       .onChange(of: validation) { newValue in
         switch newValue {
         case .invalid:
-          saveButtonColor = .systemRed
+          saveButtonColor = Color(.systemRed)
         case .unknown, .needsValidation, .valid:
-          saveButtonColor = .systemGreen
+          saveButtonColor = Color(.systemGreen)
         }
       }
 
       selectedView(selection)
-        .roundedContainer()
+        .buttonStyle { button in
+          button.calm = false
+          button.hoverEffect = true
+          button.unfocusedOpacity = 0.6
+        }
+        .menuStyle { menu in
+          menu.calm = false
+          menu.hoverEffect = true
+          menu.backgroundColor = .systemGray
+          menu.unfocusedOpacity = 0.8
+        }
+        .textFieldStyle { textField in
+          textField.calm = false
+          textField.cornerRadius = 2
+          textField.decorationColor = .accentColor
+          textField.unfocusedOpacity = 0.0
+        }
+        .checkboxStyle { checkbox in
+          checkbox.font = .caption
+        }
+        .roundedStyle()
 
       Spacer()
 
       HStack {
         Spacer()
         Button(action: onDismiss, label: { Text("Cancel") })
-          .buttonStyle(.zen(.init(color: .systemRed, grayscaleEffect: .constant(true))))
+          .buttonStyle(.cancel)
         Button(action: { onSubmit() }, label: { Text("Save") })
-          .buttonStyle(.zen(.init(color: saveButtonColor, hoverEffect: .constant(false))))
           .keyboardShortcut(.defaultAction)
+          .buttonStyle(.positive)
       }
-      .padding()
     }
+    .style(.derived)
     .padding(.top, 36)
+    .padding(.bottom, 16)
     .background(Color(.textBackgroundColor))
+    .style(.section(.detail))
+    .enableInjection()
   }
 
   @ViewBuilder @MainActor
@@ -221,14 +257,18 @@ struct NewCommandView: View {
     VStack(alignment: .leading) {
       switch selection {
       case .application:
-        if case .application(let application, let action, let inBackground, let hideWhenRunning, let ifNotRunning) = payload {
+        if case .application(let application, let action, let inBackground,
+                             let hideWhenRunning, let ifNotRunning,
+                             let waitForAppToLaunch, let addToStage) = payload {
           NewCommandApplicationView($payload, application: application, action: action,
                                     inBackground: inBackground, hideWhenRunning: hideWhenRunning,
-                                    ifNotRunning: ifNotRunning, validation: $validation)
+                                    ifNotRunning: ifNotRunning, waitForAppToLaunch: waitForAppToLaunch,
+                                    addToStage: addToStage, validation: $validation)
         } else {
           NewCommandApplicationView($payload, application: nil, action: .open,
                                     inBackground: false, hideWhenRunning: false,
-                                    ifNotRunning: false, validation: $validation)
+                                    ifNotRunning: false, waitForAppToLaunch: false,
+                                    addToStage: false, validation: $validation)
         }
       case .url:
         NewCommandURLView($payload, validation: $validation,
@@ -240,33 +280,17 @@ struct NewCommandView: View {
       case .shortcut:
         NewCommandShortcutView($payload, validation: $validation)
       case .script:
-        if case .script(let value, let kind, let scriptExtension) = payload {
-          NewCommandScriptView($payload,
-                               kind: kind,
-                               value: value,
-                               scriptExtension: scriptExtension,
-                               validation: $validation) { onSave($0, $title.wrappedValue) }
-        } else {
-          NewCommandScriptView($payload, kind: .source, value: "",
-                               scriptExtension: .shellScript,
-                               validation: $validation) { onSave($0, $title.wrappedValue) }
-        }
-      case .text:
-        NewCommandTextView(payload: $payload, validation: $validation, onSubmit: {
-          onSubmit()
-        })
-      case .system:
-        NewCommandSystemCommandView($payload, validation: $validation)
-      case .menuBar:
-        NewCommandMenuBarView($payload, validation: $validation)
-      case .mouse:
-        NewCommandMouseView(payload: $payload, validation: $validation)
-      case .windowManagement:
-        NewCommandWindowManagementView($payload, validation: $validation)
-      case .builtIn:
-        NewCommandBuiltInView($payload, validation: $validation)
-      case .uiElement:
-        NewCommandUIElementView($payload, validation: $validation)
+        NewCommandScriptView($payload, kind: .source, value: "",
+                             scriptExtension: .shellScript,
+                             validation: $validation) { onSave($0, $title.wrappedValue) }
+      case .text:             NewCommandTextView(payload: $payload, validation: $validation, onSubmit: onSubmit)
+      case .system:           NewCommandSystemCommandView($payload, validation: $validation)
+      case .menuBar:          NewCommandMenuBarView($payload, validation: $validation)
+      case .mouse:            NewCommandMouseView(payload: $payload, validation: $validation)
+      case .windowManagement: NewCommandWindowManagementView($payload, validation: $validation)
+      case .builtIn:          NewCommandBuiltInView($payload, validation: $validation)
+      case .uiElement:        NewCommandUIElementView($payload, validation: $validation)
+      case .bundled:          NewCommandBundledView($payload, validation: $validation)
       }
     }
   }
@@ -288,8 +312,8 @@ struct NewCommandView_Previews: PreviewProvider {
       workflowId: UUID().uuidString,
       commandId: nil,
       title: "New command",
-      selection: .text,
-      payload: .text(.init(.insertText(.init("Hello, world!", mode: .instant)))),
+      selection: .bundled,
+      payload: .text(.init(.insertText(.init("Hello, world!", mode: .instant, actions: [])))),
       onDismiss: {},
       onSave: { _, _ in })
     .designTime()

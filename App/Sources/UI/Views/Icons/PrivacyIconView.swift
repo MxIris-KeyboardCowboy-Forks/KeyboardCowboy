@@ -21,7 +21,9 @@ struct PrivacyIconView: View {
       )
       .mask(alignment: .trailing) {
         Rectangle()
-          .frame(width: size * 0.5)
+          .frame(width: size * 2, height: size * 2)
+          .offset(x: size * 1.35)
+          .rotationEffect(.degrees(45), anchor: .center)
       }
     }
   }
@@ -64,16 +66,5 @@ private struct InternalPrivayIconView: View {
 }
 
 #Preview {
-  HStack(alignment: .top, spacing: 8) {
-    PrivacyIconView(size: 192)
-    VStack(alignment: .leading, spacing: 8) {
-      PrivacyIconView(size: 128)
-      HStack(alignment: .top, spacing: 8) {
-        PrivacyIconView(size: 64)
-        PrivacyIconView(size: 32)
-        PrivacyIconView(size: 16)
-      }
-    }
-  }
-  .padding()
+  IconPreview { PrivacyIconView(size: $0) }
 }

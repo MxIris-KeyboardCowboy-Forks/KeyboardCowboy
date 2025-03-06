@@ -14,7 +14,7 @@ enum DetailViewState: Hashable, Identifiable, Equatable {
     }
   }
 
-  case single
+  case single(DetailViewModel)
   case multiple([DetailViewModel])
   case empty
 }
@@ -52,12 +52,14 @@ struct DetailViewModel: Hashable, Identifiable, Equatable {
       case .keyboardShortcuts(let keyboardTrigger): keyboardTrigger.shortcuts.map(\.id).joined()
       case .snippet(let trigger): trigger.id
       case .empty: "empty"
+      case .modifier(let trigger): trigger.id
       }
     }
 
     case applications([DetailViewModel.ApplicationTrigger])
     case keyboardShortcuts(DetailViewModel.KeyboardTrigger)
     case snippet(DetailViewModel.SnippetTrigger)
+    case modifier(DetailViewModel.ModifierTrigger)
     case empty
   }
 
@@ -80,7 +82,7 @@ struct DetailViewModel: Hashable, Identifiable, Equatable {
 
       case closed, launched, frontMost, resignFrontMost
 
-      public var displayValue: String {
+      var displayValue: String {
         switch self {
         case .launched:  "Launched"
         case .closed:    "Closed"
@@ -92,6 +94,7 @@ struct DetailViewModel: Hashable, Identifiable, Equatable {
   }
 
   struct KeyboardTrigger: Codable, Hashable, Equatable {
+    var allowRepeat: Bool
     var passthrough: Bool
     var holdDuration: Double?
     var shortcuts: [KeyShortcut]
@@ -100,5 +103,9 @@ struct DetailViewModel: Hashable, Identifiable, Equatable {
   struct SnippetTrigger: Codable, Hashable, Equatable {
     var id: String
     var text: String
+  }
+
+  struct ModifierTrigger: Codable, Hashable, Equatable {
+    var id: String
   }
 }

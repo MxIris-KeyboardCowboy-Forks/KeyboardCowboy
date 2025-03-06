@@ -1,4 +1,5 @@
 import AppKit
+import Bonzai
 import Combine
 import SwiftUI
 
@@ -11,12 +12,33 @@ final class WorkflowNotificationController: ObservableObject {
   )
 
   private var workItem: DispatchWorkItem?
+  private var windowTask: Task<Void, any Error>?
 
-  lazy var windowController: NSWindowController = {
-    let content = WorkflowNotificationView(publisher: publisher)
-    let window = NotificationPanel(animationBehavior: .utilityWindow, content: content)
-    let windowController = NSWindowController(window: window)
-    return windowController
+  private lazy var window: SizeFittingWindow = {
+    let styleMask: NSWindow.StyleMask = [.borderless, .nonactivatingPanel]
+    let windowManager = WindowManager()
+    let window = ZenSwiftUIWindow(
+      styleMask: styleMask,
+      content: WorkflowNotificationView(publisher: self.publisher)
+        .environmentObject(windowManager)
+        .ignoresSafeArea()
+    )
+    windowManager.window = window
+
+    window.animationBehavior = .utilityWindow
+    window.collectionBehavior.insert(.fullScreenAuxiliary)
+    window.collectionBehavior.insert(.canJoinAllSpaces)
+    window.collectionBehavior.insert(.stationary)
+    window.isOpaque = false
+    window.isMovable = false
+    window.isMovableByWindowBackground = false
+    window.level = .screenSaver
+    window.backgroundColor = .clear
+    window.acceptsMouseMovedEvents = false
+    window.ignoresMouseEvents = true
+    window.hasShadow = false
+
+    return window
   }()
 
   private let publisher: WorkflowNotificationPublisher = .init(WorkflowNotificationController.emptyModel)
@@ -28,6 +50,7 @@ final class WorkflowNotificationController: ObservableObject {
   }
 
   func reset() {
+    windowTask?.cancel()
     workItem?.cancel()
     Task { @MainActor in
       let emptyModel = WorkflowNotificationViewModel(
@@ -36,7 +59,7 @@ final class WorkflowNotificationController: ObservableObject {
         glow: false,
         keyboardShortcuts: [])
       publisher.publish(emptyModel)
-      windowController.window?.close()
+      window.close()
     }
   }
 
@@ -45,18 +68,50 @@ final class WorkflowNotificationController: ObservableObject {
 
     workItem?.cancel()
 
-    Task { @MainActor [publisher, windowController] in
-      withAnimation(WorkflowNotificationView.animation) {
-        publisher.publish(notification)
-      }
-      windowController.showWindow(nil)
+    guard let screen = NSScreen.main else { return }
+
+    let placementRawValue = UserDefaults.standard.string(forKey: "Notifications.Placement") ?? ""
+    let placement = NotificationPlacement.init(rawValue: placementRawValue) ?? .bottomTrailing
+
+    publisher.publish(notification)
+    window.contentView?.layout()
+    let size = window.sizeThatFits(in: CGSize(width: screen.frame.width / 2,
+                                              height: screen.frame.height / 2))
+    window.setFrame(NSRect(origin: .zero, size: size), display: false)
+
+    let menubarHeight: CGFloat = 16
+    let origin: NSPoint
+
+    switch placement {
+    case .center:
+      origin = .init(x: screen.frame.midX, y: screen.frame.mainDisplayFlipped.midY)
+    case .leading:
+      origin = .init(x: screen.frame.minX, y: screen.frame.mainDisplayFlipped.midY - size.height / 2)
+    case .trailing:
+      origin = .init(x: screen.frame.maxX - size.width, y: screen.frame.mainDisplayFlipped.midY - size.height / 2)
+    case .top:
+      origin = .init(x: screen.frame.midX - size.width / 2, y: screen.visibleFrame.mainDisplayFlipped.maxY - size.height - menubarHeight)
+    case .bottom:
+      origin = .init(x: screen.frame.midX - size.width / 2, y: screen.frame.mainDisplayFlipped.minY)
+    case .topLeading:
+      origin = .init(x: screen.frame.minX, y: screen.visibleFrame.mainDisplayFlipped.maxY - size.height - menubarHeight)
+    case .topTrailing:
+      origin = .init(x: screen.frame.maxX - size.width, y: screen.frame.mainDisplayFlipped.maxY - size.height - menubarHeight)
+    case .bottomLeading:
+      origin = .init(x: screen.frame.minX, y: screen.frame.mainDisplayFlipped.minY)
+    case .bottomTrailing:
+      origin = .init(x: screen.frame.maxX - size.width, y: screen.frame.mainDisplayFlipped.minY)
     }
+
+    window.setFrame(NSRect(origin: origin, size: size), display: true)
+    window.orderFrontRegardless()
 
     guard scheduleDismiss else { return }
 
     workItem = DispatchWorkItem { [weak self] in
       self?.reset()
     }
+
     DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: workItem!)
   }
 }

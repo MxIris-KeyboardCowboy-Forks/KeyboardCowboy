@@ -49,36 +49,10 @@ struct GenericAppIconView: View {
       }
       .frame(width: size, height: size)
       .fixedSize()
-      .drawingGroup(opaque: true)
       .iconShape(size)
   }
 }
 
 #Preview {
-  VStack {
-    HStack(alignment: .top, spacing: 8) {
-      GenericAppIconView(size: 192)
-      VStack(alignment: .leading, spacing: 8) {
-        GenericAppIconView(size: 128)
-        HStack(alignment: .top, spacing: 8) {
-          GenericAppIconView(size: 64)
-          GenericAppIconView(size: 32)
-          GenericAppIconView(size: 16)
-        }
-      }
-    }
-
-    HStack(alignment: .top, spacing: 8) {
-      GenericAppIconView(size: 192)
-      VStack(alignment: .leading, spacing: 8) {
-        GenericAppIconView(size: 128)
-        HStack(alignment: .top, spacing: 8) {
-          GenericAppIconView(size: 64)
-          GenericAppIconView(size: 32)
-          GenericAppIconView(size: 16)
-        }
-      }
-    }
-  }
-  .padding()
+  IconPreview { GenericAppIconView(size: $0) }
 }

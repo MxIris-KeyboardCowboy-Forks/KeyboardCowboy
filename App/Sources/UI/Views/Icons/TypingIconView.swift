@@ -59,10 +59,8 @@ struct TypingIconView: View {
       }
       .frame(width: size, height: size)
       .fixedSize()
-      .drawingGroup(opaque: true)
       .iconShape(size)
   }
-
 }
 
 private struct TypingIconTextView: View {
@@ -167,16 +165,5 @@ struct TextContent: Identifiable {
 }
 
 #Preview {
-  HStack(alignment: .top, spacing: 8) {
-    TypingIconView(size: 192)
-    VStack(alignment: .leading, spacing: 8) {
-      TypingIconView(size: 128)
-      HStack(alignment: .top, spacing: 8) {
-        TypingIconView(size: 64)
-        TypingIconView(size: 32)
-        TypingIconView(size: 16)
-      }
-    }
-  }
-  .padding()
+  IconPreview { TypingIconView(size: $0) }
 }

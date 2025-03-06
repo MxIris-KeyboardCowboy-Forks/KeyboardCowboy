@@ -1,18 +1,17 @@
 import Foundation
 import Cocoa
 
-@MainActor
 final class Benchmark {
   var isEnabled: Bool = false
 
   private var storage = [String: Double]()
 
-  static let shared: Benchmark = .init()
+  nonisolated(unsafe) static let shared: Benchmark = .init()
 
   private init() {}
 
-  func start(_ identifier: @autoclosure @Sendable () -> String) {
-    guard isEnabled else { return }
+  nonisolated func start(_ identifier: @autoclosure @Sendable () -> String, forceEnable: Bool = false) {
+    guard (isEnabled || forceEnable) else { return }
     if storage[identifier()] != nil {
       debugPrint("⏱ Benchmark: duplicate start")
     }
@@ -20,11 +19,20 @@ final class Benchmark {
   }
 
   @discardableResult
-  func stop(_ identifier: @autoclosure @Sendable () -> String) -> String {
-    guard isEnabled, let startTime = storage[identifier()] else {
+  func lap(_ identifier: @autoclosure @Sendable () -> String, forceEnable: Bool = false, function: StaticString = #function, line: Int = #line) -> String {
+    guard (isEnabled || forceEnable), let startTime = storage[identifier()] else {
       return "Unknown identifier: \(identifier())"
     }
-    Swift.print("⏱️ Benchmark(\(identifier())) = \(CACurrentMediaTime() - startTime) ")
+    Swift.print("🛎️ (\(identifier())):\(line) = \(CACurrentMediaTime() - startTime) ")
+    return "⏱ Benchmark(\(identifier())) = \(CACurrentMediaTime() - startTime) "
+  }
+
+  @discardableResult
+  func stop(_ identifier: @autoclosure @Sendable () -> String, forceEnable: Bool = false) -> String {
+    guard (isEnabled || forceEnable), let startTime = storage[identifier()] else {
+      return "Unknown identifier: \(identifier())"
+    }
+    Swift.print("⏱️ (\(identifier())) = \(CACurrentMediaTime() - startTime) \n")
     storage[identifier()] = nil
     return "⏱ Benchmark(\(identifier())) = \(CACurrentMediaTime() - startTime) "
   }

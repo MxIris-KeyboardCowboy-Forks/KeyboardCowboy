@@ -43,6 +43,36 @@ Once you've created your workflow, it will run automatically, without the need f
 
 By assigning frequently-used commands to the function key, you can streamline your workflow and save time. Overall, utilizing function keys can help you work more efficiently and effectively, making it a valuable tool for any programmer or power user.
 
+### Wiki Quicklinks
+- [Groups](https://github.com/zenangst/KeyboardCowboy/wiki/Groups)
+  - [The Role of Groups](https://github.com/zenangst/KeyboardCowboy/wiki/Groups#the-role-of-groups)
+  - [Flexibility and Ease of Use](https://github.com/zenangst/KeyboardCowboy/wiki/Groups#flexibility-and-ease-of-use)
+- [Workflows](https://github.com/zenangst/KeyboardCowboy/wiki/Workflows)
+  - [What Are Workflows?](https://github.com/zenangst/KeyboardCowboy/wiki/Workflows#what-are-workflows)
+  - [Sequential Workflows](https://github.com/zenangst/KeyboardCowboy/wiki/Workflows#sequential-workflows)
+  - [Concurrent Workflows](https://github.com/zenangst/KeyboardCowboy/wiki/Workflows#concurrent-workflows)
+  - [How to Organize Workflows](https://github.com/zenangst/KeyboardCowboy/wiki/Workflows#how-to-organize-workflows)
+- [Triggers](https://github.com/zenangst/KeyboardCowboy/wiki/Triggers)
+  - [Triggers](https://github.com/zenangst/KeyboardCowboy/wiki/Triggers#triggers)
+  - [Keyboard Shortcut Triggers](https://github.com/zenangst/KeyboardCowboy/wiki/Triggers#keyboard-shortcut-triggers)
+    - [Passthrough Feature](https://github.com/zenangst/KeyboardCowboy/wiki/Triggers#passthrough-feature)
+    - [Hold for X Seconds](https://github.com/zenangst/KeyboardCowboy/wiki/Triggers#hold-for-x-seconds)
+  - [Application Triggers](https://github.com/zenangst/KeyboardCowboy/wiki/Triggers#application-triggers)
+    - [Future Developments](https://github.com/zenangst/KeyboardCowboy/wiki/Triggers#future-developments)
+- [Commands](https://github.com/zenangst/KeyboardCowboy/wiki/Commands)
+  - [Applications Commands](https://github.com/zenangst/KeyboardCowboy/wiki/Commands#application-commands)
+  - [Menu Bar Commands](https://github.com/zenangst/KeyboardCowboy/wiki/Commands#menu-bar-commands)
+  - [URL Commands](https://github.com/zenangst/KeyboardCowboy/wiki/Commands#url-commands)
+  - [Open Commands](https://github.com/zenangst/KeyboardCowboy/wiki/Commands#open-commands)
+  - [Keyboard Shortcut Commands](https://github.com/zenangst/KeyboardCowboy/wiki/Commands#keyboard-shortcuts-commands)
+  - [Shortcuts Commands](https://github.com/zenangst/KeyboardCowboy/wiki/Commands#shortcuts-commands)
+  - [Script Commands](https://github.com/zenangst/KeyboardCowboy/wiki/Commands#scripts-commands)
+  - [Type Commands](https://github.com/zenangst/KeyboardCowboy/wiki/Commands#type-commands)
+  - [Macro Commands](https://github.com/zenangst/KeyboardCowboy/wiki/Commands#macros)
+  - [System Commands](https://github.com/zenangst/KeyboardCowboy/wiki/Commands#system-commands)
+  - [Window Navigation Commands](https://github.com/zenangst/KeyboardCowboy/wiki/Commands#window-navigation-commands)
+  - [Window Tiling Commands](https://github.com/zenangst/KeyboardCowboy/wiki/Commands#window-tiling-commands)
+
 ### Security and Privacy
 
 Keyboard Cowboy is designed to be secure and private. It does not collect any personal information or send any data to third parties. All data is stored locally on your computer and is never transmitted over the internet.
@@ -53,6 +83,8 @@ In addition, macOS comes with built in security, so Keyboard Cowboy will be disa
 
 We don't stalk you, we don't collect your data, we don't sell your data. We don't even know who you are. But we care about your privacy and security. ❤️
 
+## Activity
+![Alt](https://repobeats.axiom.co/api/embed/a24566b5434dc50aec19581d28f9a406ed46de05.svg "Repobeats analytics image")
 
 ## Development
 

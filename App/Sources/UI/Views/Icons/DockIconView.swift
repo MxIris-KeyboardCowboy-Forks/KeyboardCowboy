@@ -56,22 +56,10 @@ struct DockIconView: View {
       })
       .frame(width: size, height: size)
       .fixedSize()
-      .drawingGroup(opaque: true)
       .iconShape(size)
   }
 }
 
 #Preview {
-  HStack(alignment: .top, spacing: 8) {
-    DockIconView(size: 192)
-    VStack(alignment: .leading, spacing: 8) {
-      DockIconView(size: 128)
-      HStack(alignment: .top, spacing: 8) {
-        DockIconView(size: 64) 
-        DockIconView(size: 32)
-        DockIconView(size: 16)
-      }
-    }
-  }
-  .padding()
+  IconPreview { DockIconView(size: $0) }
 }

@@ -1,67 +1,83 @@
+import AppKit
 import Bonzai
 import SwiftUI
 
-struct MainWindow: Scene {
+@MainActor
+final class MainWindow: NSObject, NSWindowDelegate {
+  private var window: NSWindow?
   private let core: Core
-  @FocusState var focus: AppFocus?
+  private let windowOpener: WindowOpener
 
-  @Environment(\.openWindow) private var openWindow
-  private let onScene: (AppScene) -> Void
-
-  init(_ core: Core, onScene: @escaping (AppScene) -> Void) {
+  init(core: Core) {
     self.core = core
-    self.onScene = onScene
+    self.windowOpener = WindowOpener(core: core)
   }
 
-  var body: some Scene {
-    WindowGroup(id: KeyboardCowboy.mainWindowIdentifier) {
-      MainWindowView($focus, core: core, onSceneAction: {
-        onScene($0)
-      })
-      .animation(.easeInOut, value: core.contentStore.state)
-      .onAppear { NSWindow.allowsAutomaticWindowTabbing = false }
+  func open() {
+    let mainWindowIdentifier = NSUserInterfaceItemIdentifier(rawValue: KeyboardCowboyApp.mainWindowIdentifier)
+    if let mainWindow = NSApplication.shared.windows.first(where: { $0.identifier == mainWindowIdentifier }) {
+      mainWindow.makeKeyAndOrderFront(nil)
+      KeyboardCowboyApp.activate()
+      return
     }
-    .windowResizability(.contentSize)
-    .windowStyle(.hiddenTitleBar)
-    .commands {
-      CommandGroup(after: .appSettings) {
-        AppMenu()
-        Button { openWindow(id: KeyboardCowboy.releaseNotesWindowIdentifier) } label: { Text("What's new?") }
-      }
-      CommandGroup(replacing: .newItem) {
-        FileMenu(
-          onNewConfiguration: {
-            let action = SidebarView.Action.addConfiguration(name: "New Configuration")
-            core.configCoordinator.handle(action)
-            core.sidebarCoordinator.handle(action)
-            core.contentCoordinator.handle(action)
-            core.detailCoordinator.handle(action)
-          },
-          onNewGroup: { onScene(.addGroup) },
-          onNewWorkflow: {
-            let action = ContentView.Action.addWorkflow(workflowId: UUID().uuidString)
-            core.contentCoordinator.handle(action)
-            core.detailCoordinator.handle(action)
-            focus = .detail(.name)
-          },
-          onNewCommand: { id in
-            onScene(.addCommand(id))
-          }
-        )
-        .environmentObject(core.contentStore.groupStore)
-        .environmentObject(core.detailCoordinator.statePublisher)
-        .environmentObject(core.detailCoordinator.infoPublisher)
-      }
 
-      CommandGroup(replacing: .toolbar) {
-        ViewMenu(onFilter: {
-          focus = .search
-        })
-      }
+    let content = MainView(core: core, onSceneAction: onSceneAction(_:))
+      .environmentObject(windowOpener)
+      .environmentObject(core.configurationUpdater)
+    let styleMask: NSWindow.StyleMask = [
+      .titled, .closable, .resizable, .fullSizeContentView
+    ]
 
-      CommandGroup(replacing: .help) {
-        HelpMenu()
+    let window = ZenSwiftUIWindow(styleMask: styleMask, content: content)
+    window.titlebarAppearsTransparent = true
+    window.titleVisibility = .visible
+    window.identifier = .init(rawValue: KeyboardCowboyApp.mainWindowIdentifier)
+    window.delegate = self
+    if let frameDescriptor = UserDefaults.standard.string(forKey: "MainWindowFrame") {
+      window.setFrame(from: frameDescriptor)
+    } else {
+      window.center()
+    }
+    window.toolbarStyle = .unifiedCompact
+    window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+    window.standardWindowButton(.zoomButton)?.isHidden = true
+    window.orderFrontRegardless()
+    window.makeKeyAndOrderFront(nil)
+    KeyboardCowboyApp.activate(setActivationPolicy: true)
+    self.window = window
+  }
+
+  func windowWillClose(_ notification: Notification) {
+    if let mainWindow = window {
+      UserDefaults.standard.set(mainWindow.frameDescriptor, forKey: "MainWindowFrame")
+    }
+    KeyboardCowboyApp.deactivate()
+    self.window = nil
+  }
+
+  func onSceneAction(_ scene: AppScene) {
+    guard KeyboardCowboyApp.env() != .previews else { return }
+    switch scene {
+    case .permissions:
+      windowOpener.openPermissions()
+      KeyboardCowboyApp.activate()
+    case .mainWindow:
+      if let mainWindow = KeyboardCowboyApp.mainWindow {
+        mainWindow.makeKeyAndOrderFront(nil)
+      } else {
+        open()
       }
+      KeyboardCowboyApp.activate()
+    case .addGroup:
+      windowOpener.openGroup(.add(WorkflowGroup.empty()))
+    case .editGroup(let groupId):
+      if let workflowGroup = core.groupStore.group(withId: groupId) {
+        windowOpener.openGroup(.edit(workflowGroup))
+      } else {
+        assertionFailure("Unable to find workflow group")
+      }
+    case .addCommand(let workflowId):
+      windowOpener.openNewCommandWindow(.newCommand(workflowId: workflowId))
     }
   }
 }

@@ -63,16 +63,85 @@ private extension Command {
     let kind: CommandViewModel.Kind
     switch self {
     case .application(let applicationCommand):
-      let inBackground = applicationCommand.modifiers.contains(.background)
-      let hideWhenRunning = applicationCommand.modifiers.contains(.hidden)
-      let ifNotRunning = applicationCommand.modifiers.contains(.onlyIfNotRunning)
-      kind = .application(.init(id: applicationCommand.id, action: applicationCommand.action.displayValue,
-                                inBackground: inBackground, hideWhenRunning: hideWhenRunning, ifNotRunning: ifNotRunning))
-
+      kind = .application(
+        CommandViewModel.Kind.ApplicationModel(
+          id: applicationCommand.id,
+          action: applicationCommand.action.displayValue,
+          inBackground: applicationCommand.modifiers.contains(.background),
+          hideWhenRunning: applicationCommand.modifiers.contains(.hidden),
+          ifNotRunning: applicationCommand.modifiers.contains(.onlyIfNotRunning),
+          addToStage: applicationCommand.modifiers.contains(.addToStage),
+          waitForAppToLaunch: applicationCommand.modifiers.contains(.waitForAppToLaunch)
+        )
+      )
     case .builtIn(let builtInCommand):
       kind = .builtIn(.init(id: builtInCommand.id, name: builtInCommand.name, kind: builtInCommand.kind))
+    case .bundled(let bundledCommand):
+      switch bundledCommand.kind {
+      case .appFocus(let appFocusCommand):
+        let match: Application?
+
+        if appFocusCommand.bundleIdentifer == Application.currentAppBundleIdentifier() {
+          match = Application.currentApplication()
+        } else {
+          match = applicationStore.applications.first(where: { $0.bundleIdentifier == appFocusCommand.bundleIdentifer })
+        }
+
+        kind = .bundled(
+          CommandViewModel.Kind.BundledModel.init(
+            id: appFocusCommand.id,
+            name: bundledCommand.name,
+            kind: .appFocus(
+              CommandViewModel.Kind.AppFocusModel(
+                application: match,
+                tiling: appFocusCommand.tiling,
+                hideOtherApps: appFocusCommand.hideOtherApps,
+                createNewWindow: appFocusCommand.createNewWindow
+              )
+            )
+          )
+        )
+        break
+      case .workspace(let workspaceCommand):
+        var applications = [Application]()
+        for bundleIdentifier in workspaceCommand.bundleIdentifiers {
+          guard let match = applicationStore.applications.first(where: { $0.bundleIdentifier == bundleIdentifier }) else {
+            continue
+          }
+          applications.append(match)
+        }
+
+        let model = CommandViewModel.Kind.WorkspaceModel.init(
+          applications: applications,
+          tiling: workspaceCommand.tiling,
+          hideOtherApps: workspaceCommand.hideOtherApps)
+        kind = .bundled(
+          .init(
+            id: bundledCommand.id,
+            name: bundledCommand.name,
+            kind: .workspace(model)
+          )
+        )
+      case .tidy(let tidyCommand):
+        var rules = [CommandViewModel.Kind.WindowTidyModel.Rule]()
+        for rule in tidyCommand.rules {
+          guard let match = applicationStore.applications.first(where: { $0.bundleIdentifier == rule.bundleIdentifier }) else {
+            continue
+          }
+          rules.append(CommandViewModel.Kind.WindowTidyModel.Rule(application: match, tiling: rule.tiling))
+        }
+        let tidyModel = CommandViewModel.Kind.WindowTidyModel(rules: rules)
+
+        kind = .bundled(
+          .init(
+            id: bundledCommand.id,
+            name: bundledCommand.name,
+            kind: .tidy(tidyModel)
+          )
+        )
+      }
     case .keyboard(let keyboardCommand):
-      kind =  .keyboard(.init(id: keyboardCommand.id, keys: keyboardCommand.keyboardShortcuts))
+      kind =  .keyboard(.init(id: keyboardCommand.id, iterations: keyboardCommand.iterations, keys: keyboardCommand.keyboardShortcuts))
     case .menuBar(let menubarCommand):
       kind = .menuBar(.init(id: menubarCommand.id, application: menubarCommand.application, tokens: menubarCommand.tokens))
     case .mouse(let mouseCommand):
@@ -101,7 +170,7 @@ private extension Command {
     case .text(let text):
       switch text.kind {
       case .insertText(let typeCommand):
-        kind = .text(.init(kind: .type(.init(id: typeCommand.input, mode: typeCommand.mode, input: typeCommand.input))))
+        kind = .text(.init(kind: .type(.init(id: typeCommand.input, mode: typeCommand.mode, input: typeCommand.input, actions: typeCommand.actions))))
       }
     case .systemCommand(let systemCommand):
       kind = .systemCommand(.init(id: systemCommand.id, kind: systemCommand.kind))
@@ -170,11 +239,14 @@ extension Workflow.Trigger {
           }
         )
     case .keyboardShortcuts(let trigger):
-        .keyboardShortcuts(.init(passthrough: trigger.passthrough,
+        .keyboardShortcuts(.init(allowRepeat: trigger.allowRepeat,
+                                 passthrough: trigger.passthrough,
                                  holdDuration: trigger.holdDuration,
                                  shortcuts: trigger.shortcuts))
     case .snippet(let trigger):
         .snippet(.init(id: trigger.id, text: trigger.text))
+    case .modifier(let modifier):
+        .modifier(.init(id: modifier.id))
     }
   }
 }

@@ -9,6 +9,9 @@ final class SnippetController: @unchecked Sendable, ObservableObject {
   var isEnabled: Bool = true
 
   @MainActor
+  static var currentSnippet: String = ""
+
+  @MainActor
   private var currentSnippet: String = ""
   private var machPortEventSubscription: AnyCancellable?
   private var snippetsStorage = [String: [Workflow]]()
@@ -17,18 +20,15 @@ final class SnippetController: @unchecked Sendable, ObservableObject {
 
   private let commandRunner: CommandRunning
   private let customCharSet: CharacterSet
-  private let keyboardShortcutsController: KeyboardShortcutsController
   private let keyboardCommandRunner: KeyboardCommandRunner
   private let specialKeys: [Int]
   private let store: KeyCodesStore
 
   init(commandRunner: CommandRunning,
        keyboardCommandRunner: KeyboardCommandRunner,
-       keyboardShortcutsController: KeyboardShortcutsController,
        store: KeyCodesStore) {
     self.commandRunner = commandRunner
     self.keyboardCommandRunner = keyboardCommandRunner
-    self.keyboardShortcutsController = keyboardShortcutsController
     self.store = store
     self.specialKeys = Array(store.specialKeys().keys)
 
@@ -68,16 +68,16 @@ final class SnippetController: @unchecked Sendable, ObservableObject {
       return
     }
 
-    let modifiers = VirtualModifierKey.fromCGEvent(event, specialKeys: specialKeys)
+    let modifiers = VirtualModifierKey.modifiers(for: keyCode, flags: event.flags, specialKeys: Array(store.specialKeys().keys))
 
     // Figure out which modifier to apply to get the correct display value.
     var modifier: VirtualModifierKey?
-    if modifiers == [.shift] {
-      modifier = .shift
-    } else if modifiers == [.option] {
-      modifier = .option
-    } else if modifiers == [.control] {
-      modifier = .control
+    if modifiers == [.leftShift] {
+      modifier = .leftShift
+    } else if modifiers == [.leftOption] {
+      modifier = .leftOption
+    } else if modifiers == [.leftControl] {
+      modifier = .leftControl
     }
 
     guard let displayValue = store.displayValue(for: keyCode, modifier: modifier) else {
@@ -91,6 +91,7 @@ final class SnippetController: @unchecked Sendable, ObservableObject {
     }
 
     currentSnippet = currentSnippet + displayValue
+    Self.currentSnippet = currentSnippet
 
     timeout?.invalidate()
     timeout = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false, block: { [weak self] timer in
@@ -116,7 +117,7 @@ final class SnippetController: @unchecked Sendable, ObservableObject {
       // Clean up snippet before running command
       if let key = VirtualSpecialKey.keys[kVK_Delete] {
         for _ in 0..<currentSnippet.count {
-          _ = try? keyboardCommandRunner.run([.init(key: key)], with: nil)
+          _ = try? await keyboardCommandRunner.run([.init(key: key)], iterations: 1, with: nil)
         }
         try await Task.sleep(for: .milliseconds(10))
       }
@@ -126,7 +127,6 @@ final class SnippetController: @unchecked Sendable, ObservableObject {
           workflow.commands,
           checkCancellation: false,
           resolveUserEnvironment: true,
-          shortcut: .empty(),
           machPortEvent: machPortEvent,
           repeatingEvent: false
         )
@@ -173,4 +173,4 @@ final class SnippetController: @unchecked Sendable, ObservableObject {
   }
 }
 
-extension CGEvent: @unchecked Sendable {}
+extension CGEvent: @unchecked @retroactive Sendable {}

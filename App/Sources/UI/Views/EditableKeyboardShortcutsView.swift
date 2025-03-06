@@ -34,6 +34,7 @@ struct EditableKeyboardShortcutsView<T: Hashable>: View {
     }
   }
 
+  @ObserveInjection var inject
   private var focus: FocusState<T?>.Binding
   @Environment(\.controlActiveState) private var controlActiveState
   @EnvironmentObject private var recorderStore: KeyShortcutRecorderStore
@@ -75,7 +76,7 @@ struct EditableKeyboardShortcutsView<T: Hashable>: View {
     ScrollViewReader { proxy in
       HStack {
         ScrollView(.horizontal) {
-          LazyHStack(spacing: 0) {
+          LazyHStack(spacing: 8) {
             ForEach($keyboardShortcuts) { keyboardShortcut in
               EditableKeyboardShortcutsItemView(
                 keyboardShortcut: keyboardShortcut,
@@ -91,8 +92,6 @@ struct EditableKeyboardShortcutsView<T: Hashable>: View {
                 }
               )
               .modifier(DraggableToggle(isEnabled: draggableEnabled, model: keyboardShortcut.wrappedValue))
-              .padding(.leading, 2)
-              .padding(.trailing, 4)
               .contentShape(Rectangle())
               .dropDestination(KeyShortcut.self, alignment: .horizontal, color: .accentColor, onDrop: { items, location in
                 let ids: [KeyShortcut.ID] = if selectionManager.selections.isEmpty {
@@ -166,6 +165,16 @@ struct EditableKeyboardShortcutsView<T: Hashable>: View {
         }
         Spacer()
         Button(action: {
+          keyboardShortcuts.append(KeyShortcut.anyKey)
+          reset()
+        }, label: {
+          Text("Insert Any Key")
+            .font(.caption)
+            .help("This means that any key can be used to end the sequence.")
+        })
+        .opacity((state == .recording && $keyboardShortcuts.count > 1) ? 1 : 0)
+
+        Button(action: {
           if state == .recording {
             reset()
           } else {
@@ -183,12 +192,15 @@ struct EditableKeyboardShortcutsView<T: Hashable>: View {
             )
             .animation(.smooth, value: state)
             .frame(maxWidth: 14, maxHeight: 14)
-            .padding(1)
         })
-        .buttonStyle(.calm(color: .systemRed, padding: .large))
         .opacity(!keyboardShortcuts.isEmpty ? 1 : 0)
-        .padding(.trailing, 4)
         .opacity(mode.features.contains(.record) ? 1 : 0)
+        .buttonStyle { button in
+          button.grayscaleEffect = state == .recording ? false : true
+          button.backgroundColor = .systemRed
+          button.padding = .large
+          button.hoverEffect = state == .recording ? false : true
+        }
       }
       .overlay(overlay(proxy))
       .onAppear {
@@ -220,6 +232,7 @@ struct EditableKeyboardShortcutsView<T: Hashable>: View {
         break
       }
     })
+    .enableInjection()
   }
 
   private func handleEdit(_ id: KeyShortcut.ID) {
@@ -235,11 +248,11 @@ struct EditableKeyboardShortcutsView<T: Hashable>: View {
   @ViewBuilder
   private func overlay(_ proxy: ScrollViewProxy) -> some View {
     ZStack {
-      RoundedRectangle(cornerRadius: 7)
+      RoundedRectangle(cornerRadius: 6)
         .stroke(isGlowing
                 ? Color(.systemRed) .opacity(0.5)
-                : Color.clear, lineWidth: 1)
-        .padding(1)
+                : Color.clear, lineWidth: 2)
+        .shadow(color: Color(.systemRed).opacity(isGlowing ? 1 : 0), radius: 6)
         .animation(Animation
           .easeInOut(duration: 1.25)
           .repeatForever(autoreverses: true), value: isGlowing)
@@ -254,7 +267,6 @@ struct EditableKeyboardShortcutsView<T: Hashable>: View {
             .allowsTightening(true)
             .minimumScaleFactor(0.8)
             .lineLimit(1)
-            .padding(6)
             .frame(maxWidth: .infinity)
           Spacer()
           Divider()
@@ -263,18 +275,18 @@ struct EditableKeyboardShortcutsView<T: Hashable>: View {
             .resizable()
             .aspectRatio(contentMode: .fit)
             .frame(width: 16, height: 16)
-            .padding(.trailing, 4)
         }
       })
-      .buttonStyle(.positive)
+      .buttonStyle { button in
+        button.padding = .extraLarge
+      }
       .fixedSize(horizontal: false, vertical: true)
-      .padding(4)
       .opacity(keyboardShortcuts.isEmpty ? 1 : 0)
     }
   }
 
   private func addButtonAction(_ proxy: ScrollViewProxy) {
-    let keyShortcut = KeyShortcut(id: placeholderId, key: "Recording ...", lhs: true)
+    let keyShortcut = KeyShortcut(id: placeholderId, key: "Recording ...")
     selectionManager.publish([keyShortcut.id])
     state = .recording
     recorderStore.mode = .recordKeystroke

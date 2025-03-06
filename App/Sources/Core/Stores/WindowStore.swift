@@ -8,14 +8,14 @@ import MachPort
 import Windows
 
 struct WindowStoreSnapshot: @unchecked Sendable {
-  let frontMostApplicationWindows: [WindowAccessibilityElement]
+  let frontmostApplicationWindows: [WindowAccessibilityElement]
   let visibleWindowsInStage: [WindowModel]
   let visibleWindowsInSpace: [WindowModel]
 
-  init(frontMostApplicationWindows: [WindowAccessibilityElement],
+  init(frontmostApplicationWindows: [WindowAccessibilityElement],
        visibleWindowsInStage: [WindowModel],
        visibleWindowsInSpace: [WindowModel]) {
-    self.frontMostApplicationWindows = frontMostApplicationWindows
+    self.frontmostApplicationWindows = frontmostApplicationWindows
     self.visibleWindowsInStage = visibleWindowsInStage
     self.visibleWindowsInSpace = visibleWindowsInSpace
   }
@@ -26,16 +26,16 @@ final class WindowStore: @unchecked Sendable {
     var flagsChange: AnyCancellable?
     var passthrough = PassthroughSubject<Void, Never>()
     var subject: AnyCancellable?
-    var frontMostApplication: AnyCancellable?
+    var frontmostApplication: AnyCancellable?
   }
 
   final class State: @unchecked Sendable {
     var appAccessibilityElement: AppAccessibilityElement
     var frontmostApplication: UserSpace.Application
-    var frontMostIndex: Int = 0
+    var frontmostIndex: Int = 0
     var visibleMostIndex: Int = 0
     var interactive: Bool = false
-    var frontMostApplicationWindows: [WindowAccessibilityElement] = .init()
+    var frontmostApplicationWindows: [WindowAccessibilityElement] = .init()
     var visibleWindowsInStage: [WindowModel] = .init()
     var visibleWindowsInSpace: [WindowModel] = .init()
 
@@ -61,7 +61,7 @@ final class WindowStore: @unchecked Sendable {
   }
 
   func subscribe(to publisher: Published<UserSpace.Application>.Publisher) {
-    subscriptions.frontMostApplication = publisher
+    subscriptions.frontmostApplication = publisher
       .compactMap { $0 }
       .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
       .sink { [weak self, state] application in
@@ -70,7 +70,7 @@ final class WindowStore: @unchecked Sendable {
         let pid = application.ref.processIdentifier
         state.appAccessibilityElement = AppAccessibilityElement(pid)
         state.frontmostApplication = application
-        state.frontMostIndex = 0
+        state.frontmostIndex = 0
         if state.interactive == false {
           self.index(application)
         } else {
@@ -91,64 +91,77 @@ final class WindowStore: @unchecked Sendable {
       .sink { [state, subscriptions] flags in
         state.interactive = flags != CGEventFlags.maskNonCoalesced
         if state.interactive == false {
-          state.frontMostIndex = 0
+          state.frontmostIndex = 0
           state.visibleMostIndex = 0
           subscriptions.passthrough.send()
         }
       }
   }
 
-  func snapshot() -> WindowStoreSnapshot {
-    state.snapshot()
+  func snapshot(refresh: Bool = false) -> WindowStoreSnapshot {
+    if refresh {
+      index(state.frontmostApplication)
+    }
+    return state.snapshot()
+  }
+
+  func allApplicationsInSpace(_ models: [WindowModel], onScreen: Bool, sorted: Bool = true) -> [WindowModel] {
+    let excluded = ["WindowManager", "Window Server"]
+    let minimumSize = CGSize(width: 48, height: 48)
+    let windowModels: [WindowModel] = models
+      .filter {
+        $0.ownerName != "borders" &&
+        $0.alpha > 0 &&
+        $0.id > 0 &&
+        (onScreen ? $0.isOnScreen : true) &&
+        $0.rect.size.width > minimumSize.width &&
+        $0.rect.size.height > minimumSize.height &&
+        !excluded.contains($0.ownerName)
+      }
+
+    if sorted {
+      return windowModels.sorted { lhs, rhs in
+        lhs.rect.origin.y < rhs.rect.origin.y
+      }
+    }
+
+    return windowModels
+  }
+
+  func indexStage(_ models: [WindowModel]) -> [WindowModel] {
+    let excluded = ["WindowManager", "Window Server"]
+    let minimumSize = CGSize(width: 300, height: 200)
+    let windowModels: [WindowModel] = models
+      .filter {
+        $0.ownerName != "borders" &&
+        $0.id > 0 &&
+        $0.alpha > 0 &&
+        $0.isOnScreen &&
+        $0.rect.size.width > minimumSize.width &&
+        $0.rect.size.height > minimumSize.height &&
+        !excluded.contains($0.ownerName)
+      }
+    return windowModels
+  }
+
+  func getWindows(onScreen: Bool =  true) -> [WindowModel] {
+    let options: CGWindowListOption = onScreen
+    ? [.optionOnScreenOnly, .excludeDesktopElements]
+    : [.excludeDesktopElements]
+    let windowModels: [WindowModel] = ((try? WindowsInfo.getWindows(options)) ?? [])
+    return windowModels
+  }
+  
+  func index(_ runningApplication: UserSpace.Application) {
+    let windows = getWindows()
+    self.windows = windows
+    state.visibleWindowsInSpace = allApplicationsInSpace(windows, onScreen: true)
+    state.visibleWindowsInStage = indexStage(windows)
+    indexFrontmost()
   }
 
   // MARK: - Private methods
 
-  private func getWindows() -> [WindowModel] {
-    let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
-    let windowModels: [WindowModel] = ((try? WindowsInfo.getWindows(options)) ?? [])
-    return windowModels
-  }
-
-  private func index(_ runningApplication: UserSpace.Application) {
-    let windows = getWindows()
-    self.windows = windows
-    indexAllApplicationsInSpace(windows)
-    indexStage(windows)
-    indexFrontmost()
-  }
-
-  private func indexAllApplicationsInSpace(_ models: [WindowModel]) {
-    let excluded = ["WindowManager", "Window Server"]
-    let minimumSize = CGSize(width: 0, height: 0)
-    let windowModels: [WindowModel] = models
-      .filter {
-        $0.id > 0 &&
-        $0.isOnScreen &&
-        $0.rect.size.width > minimumSize.width &&
-        $0.rect.size.height > minimumSize.height &&
-        !excluded.contains($0.ownerName)
-      }
-      .sorted { lhs, rhs in
-        lhs.rect.origin.y < rhs.rect.origin.y
-      }
-    state.visibleWindowsInSpace = windowModels
-  }
-
-  private func indexStage(_ models: [WindowModel]) {
-    let excluded = ["WindowManager", "Window Server"]
-    let minimumSize = CGSize(width: 300, height: 300)
-    let windowModels: [WindowModel] = models
-      .filter {
-        $0.id > 0 &&
-        $0.isOnScreen &&
-        $0.rect.size.width > minimumSize.width &&
-        $0.rect.size.height > minimumSize.height &&
-        !excluded.contains($0.ownerName)
-      }
-
-    state.visibleWindowsInStage = windowModels
-  }
 
   private func indexFrontmost() {
     do {
@@ -156,7 +169,7 @@ final class WindowStore: @unchecked Sendable {
         NSAccessibility.Subrole.systemDialog.rawValue,
         NSAccessibility.Subrole.dialog.rawValue
       ]
-      state.frontMostApplicationWindows = try state.appAccessibilityElement.windows()
+      state.frontmostApplicationWindows = try state.appAccessibilityElement.windows()
         .filter({
           $0.id > 0 &&
           ($0.size?.height ?? 0) > 20 &&
@@ -169,7 +182,7 @@ final class WindowStore: @unchecked Sendable {
 fileprivate extension WindowStore.State {
   func snapshot() -> WindowStoreSnapshot {
     WindowStoreSnapshot(
-      frontMostApplicationWindows: frontMostApplicationWindows,
+      frontmostApplicationWindows: frontmostApplicationWindows,
       visibleWindowsInStage: visibleWindowsInStage,
       visibleWindowsInSpace: visibleWindowsInSpace
     )

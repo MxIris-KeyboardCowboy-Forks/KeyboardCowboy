@@ -1,16 +1,17 @@
 import Foundation
 import SwiftUI
 
+@MainActor
 final class MachPortUINotifications {
   @AppStorage("Notifications.KeyboardCommands") var notificationKeyboardCommands: Bool = false
   @AppStorage("Notifications.RunningWorkflows") var notificationRunningWorkflows: Bool = false
   @AppStorage("Notifications.Bundles") var notificationBundles: Bool = false
 
   private var shouldReset: Bool = false
-  let keyboardShortcutsController: KeyboardShortcutsController
+  let shortcutResolver: ShortcutResolver
 
-  init(keyboardShortcutsController: KeyboardShortcutsController) {
-    self.keyboardShortcutsController = keyboardShortcutsController
+  init(shortcutResolver: ShortcutResolver) {
+    self.shortcutResolver = shortcutResolver
   }
 
   func notifyRunningWorkflow(_ workflow: Workflow) {
@@ -21,12 +22,9 @@ final class MachPortUINotifications {
     shouldReset = true
     if case .keyboardShortcuts(let trigger) = workflow.trigger {
       Task { @MainActor in
-        WorkflowNotificationController.shared.post(
-          WorkflowNotificationViewModel(
-            id: workflow.id,
-            workflow: workflow,
-            keyboardShortcuts: trigger.shortcuts),
-          scheduleDismiss: true)
+        #warning("The user should be able to configure this for settings")
+        CapsuleNotificationWindow.shared.open()
+        CapsuleNotificationWindow.shared.publish(workflow.name, state: .success)
       }
     }
   }
@@ -62,10 +60,10 @@ final class MachPortUINotifications {
     if let workflow = match.workflow,
        case .keyboardShortcuts(let trigger) = workflow.trigger {
       let shortcuts = Array(trigger.shortcuts.prefix(prefix))
-      let matches = Set(keyboardShortcutsController.allMatchingPrefix(match.rawValue, shortcutIndexPrefix: prefix))
-
+      let matches = Set(shortcutResolver.allMatchingPrefix(match.rawValue, shortcutIndexPrefix: prefix))
       let sortedMatches = Array(matches)
         .sorted(by: { $0.name < $1.name })
+#warning("TODO: Should we delay before showing the bundle?")
 
       Task { @MainActor in
         WorkflowNotificationController.shared.cancelReset()

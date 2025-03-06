@@ -41,6 +41,7 @@ final class CommandLineCoordinator: NSObject, ObservableObject, NSWindowDelegate
     )
     super.init()
     subscription = $input
+      .dropFirst()
       .throttle(for: 0.2, scheduler: DispatchQueue.main, latest: true)
       .sink { [weak self] newInput in
         guard let self else { return }
@@ -94,8 +95,9 @@ final class CommandLineCoordinator: NSObject, ObservableObject, NSWindowDelegate
             NSWorkspace.shared.reveal(application.path)
           } else {
             try? await applicationRunner
-              .run(.init(application: application),
-                   checkCancellation: false)
+              .run(.init(application: application), machPortEvent: nil,
+                   checkCancellation: false,
+                   snapshot: UserSpace.shared.snapshot(resolveUserEnvironment: false))
           }
         default: break
         }

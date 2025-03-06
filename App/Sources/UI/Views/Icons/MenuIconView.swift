@@ -128,7 +128,7 @@ private struct MenuBarIconWindowControls: View {
 }
 
 struct TopLeadingRoundedShape: Shape {
-  var radius: CGFloat
+  let radius: CGFloat
 
   func path(in rect: CGRect) -> Path {
     var path = Path()
@@ -153,16 +153,5 @@ struct TopLeadingRoundedShape: Shape {
 }
 
 #Preview {
-  HStack(alignment: .top, spacing: 8) {
-    MenuIconView(size: 192)
-    VStack(alignment: .leading, spacing: 8) {
-      MenuIconView(size: 128)
-      HStack(alignment: .top, spacing: 8) {
-        MenuIconView(size: 64)
-        MenuIconView(size: 32)
-        MenuIconView(size: 16)
-      }
-    }
-  }
-    .padding()
+  IconPreview { MenuIconView(size: $0) }
 }

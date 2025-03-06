@@ -22,7 +22,7 @@ final class UnhideApplicationPlugin {
       return
     }
 
-    userSpace.frontMostApplication.ref.activate()
+    userSpace.frontmostApplication.ref.activate(options: .activateIgnoringOtherApps)
     _ = runningApplication.unhide()
   }
 }

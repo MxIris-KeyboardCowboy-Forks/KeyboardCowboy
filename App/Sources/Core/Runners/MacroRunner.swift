@@ -1,28 +1,37 @@
 import Foundation
+import KeyCodes
 import MachPort
 
 final class MacroRunner {
-  private let coordinator: MacroCoordinator
   private let bezelId = "com.zenangst.Keyboard-Cowboy.MacroRunner"
+  private let coordinator: MacroCoordinator
 
   init(coordinator: MacroCoordinator) {
     self.coordinator = coordinator
   }
 
-  func run(_ macroAction: MacroAction, shortcut: KeyShortcut, machPortEvent: MachPortEvent) async -> String {
+  func run(_ macroAction: MacroAction, machPortEvent: MachPortEvent) async -> String {
     let output: String
+    let currentState = await coordinator.state
     switch macroAction.kind {
-      case .record:
-        if let newMacroKey = coordinator.newMacroKey {
-          coordinator.state = .idle
-          output = "Recorded Macro for \(newMacroKey.original.modifersDisplayValue) \(newMacroKey.uppercase.key)"
+    case .record:
+      if let recordedEvent = await coordinator.recordingEvent {
+        await coordinator.setState(.idle)
+        if let keyShortcut = await coordinator.keyShortcut(for: recordedEvent) {
+          output = "Recorded Macro for \(keyShortcut.modifersDisplayValue) \(keyShortcut.key)"
         } else {
-          coordinator.state = .recording
-          output = "Choose Macro key..."
+          output = "Recorded Macro"
         }
-      case .remove:
-        coordinator.state = .removing
-        output = "Remove Macro key..."
+      } else if currentState == .recording {
+        await coordinator.setState(.idle)
+        output = "Macro Recording Aborted."
+      } else {
+        await coordinator.setState(.recording)
+        output = "Choose Macro key..."
+      }
+    case .remove:
+      await coordinator.setState(.removing)
+      output = "Remove Macro key..."
     }
 
     Task { @MainActor [bezelId] in

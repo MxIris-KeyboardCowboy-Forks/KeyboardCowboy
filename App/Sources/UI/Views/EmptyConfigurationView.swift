@@ -6,17 +6,16 @@ struct EmptyConfigurationView: View {
     case initial
   }
 
+  @Namespace var namespace
   @State var done: Bool = false
   @State var selected: Action = .initial
   private let colors = SplashColors(primaryColor: Color(.systemGreen),
                                     secondaryColor: Color(.systemBlue),
                                     backgroundColor: Color(.sRGB, red: 0.03, green: 0.11, blue: 0.25, opacity: 1.0))
-  private let namespace: Namespace.ID
   private let onAction: (Action) -> Void
   private let model = KeyboardCowboyConfiguration.default()
 
-  init(_ namespace: Namespace.ID, onAction: @escaping (Action) -> Void) {
-    self.namespace = namespace
+  init(onAction: @escaping (Action) -> Void) {
     self.onAction = onAction
   }
 
@@ -25,7 +24,7 @@ struct EmptyConfigurationView: View {
       Text("Choose your configuration")
         .font(.title)
         .frame(maxWidth: .infinity, alignment: .center)
-        .padding(32)
+        .padding(16)
 
       Divider()
 
@@ -82,7 +81,7 @@ struct EmptyConfigurationView: View {
         .font(.title3)
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.vertical, 8)
-        .padding(.horizontal, 64)
+        .padding(.horizontal, 32)
 
 
       Button(action: {
@@ -90,11 +89,11 @@ struct EmptyConfigurationView: View {
       }, label: {
         Text("Confirm")
       })
-      .buttonStyle(.zen(.init(color: .systemGreen, hoverEffect: .constant(false))))
       .padding(.vertical)
       .matchedGeometryEffect(id: "initial-item", in: namespace)
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    .roundedStyle(padding: 0)
+    .frame(maxWidth: .infinity, minHeight: 480, maxHeight: .infinity, alignment: .leading)
     .background(SplashView(colors: colors, done: $done))
   }
 }
@@ -151,9 +150,8 @@ struct EmptyConfigurationBackgroundView: View {
 }
 
 struct EmptyConfigurationView_Previews: PreviewProvider {
-  @Namespace static var namespace
   static var previews: some View {
-    EmptyConfigurationView(namespace) { _ in }
+    EmptyConfigurationView { _ in }
       .previewLayout(.sizeThatFits)
   }
 }

@@ -2,6 +2,7 @@ import Combine
 import Foundation
 import SwiftUI
 
+@MainActor
 final class ConfigurationStore: ObservableObject, @unchecked Sendable {
   @Published private(set) var configurations = [KeyboardCowboyConfiguration]()
   @Published private(set) var selectedConfiguration: KeyboardCowboyConfiguration = .empty()
@@ -66,7 +67,7 @@ final class ConfigurationStore: ObservableObject, @unchecked Sendable {
     guard newConfigurations[index] != configuration else { return }
 
     newConfigurations[index] = configuration
-    if KeyboardCowboy.env() == .production {
+    if KeyboardCowboyApp.env() == .production {
       select(configuration)
     }
     self.configurations = newConfigurations

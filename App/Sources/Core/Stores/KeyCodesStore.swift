@@ -6,7 +6,7 @@ import KeyCodes
 import InputSources
 
 protocol CurrentInputSourceProviding {
-  func inputSource() throws -> TISInputSource
+  @MainActor func inputSource() throws -> TISInputSource
 }
 
 // Conform `InputSources` to `CurrentInputSourceProviding` in to make the
@@ -17,6 +17,7 @@ extension InputSourceController: CurrentInputSourceProviding {
   }
 }
 
+@MainActor
 final class KeyCodesStore {
   private var subscription: AnyCancellable?
   private var virtualKeyContainer: VirtualKeyContainer?
@@ -26,6 +27,7 @@ final class KeyCodesStore {
 
   internal init(_ currentInputProvider: CurrentInputSourceProviding) {
     self.currentInputProvider = currentInputProvider
+    reloadCurrentSource()
   }
 
   func subscribe(to publisher: Published<UUID?>.Publisher) {
@@ -35,7 +37,7 @@ final class KeyCodesStore {
       }
   }
 
-  func specialKeys() -> [Int: String] {
+  nonisolated func specialKeys() -> [Int: String] {
     VirtualSpecialKey.keys
   }
 
@@ -50,8 +52,16 @@ final class KeyCodesStore {
                                         matchDisplayValue: matchDisplayValue)?.keyCode
   }
 
+  func displayValue(for keyCode: Int, modifiers: [VirtualModifierKey]) -> String? {
+    virtualKeyContainer?.valueForKeyCode(keyCode, modifiers: modifiers)?.displayValue
+  }
+
   func displayValue(for keyCode: Int, modifier: VirtualModifierKey? = nil) -> String? {
-    virtualKeyContainer?.valueForKeyCode(keyCode, modifier: modifier)?.displayValue
+    if let modifier {
+      virtualKeyContainer?.valueForKeyCode(keyCode, modifiers: [modifier])?.displayValue
+    } else {
+      virtualKeyContainer?.valueForKeyCode(keyCode, modifiers: [])?.displayValue
+    }
   }
 
   // MARK: Private methods

@@ -2,13 +2,21 @@ import SwiftUI
 
 struct RelativeFocusIconView: View {
   enum Kind {
-    case up, down, left, right
+    case up, down, left, right,
+         upperLeft, upperRight,
+         lowerLeft, lowerRight,
+         center
     var systemName: String {
       switch self {
+      case .upperLeft: "arrow.up.left"
+      case .upperRight: "arrow.up.right"
+      case .lowerLeft: "arrow.down.left"
+      case .lowerRight: "arrow.down.right"
       case .up:    "arrow.up"
       case .down:  "arrow.down"
       case .left:  "arrow.left"
       case .right: "arrow.right"
+      case .center: "rectangle.center.inset.filled"
       }
     }
   }
@@ -26,9 +34,8 @@ struct RelativeFocusIconView: View {
       .overlay { iconOverlay() }
       .overlay { iconBorder(size) }
       .overlay {
-        WindowView(.init(width: (size * 0.85) * 0.9, height: (size * 0.85) * 0.9)) {
-          Image(systemName: kind.systemName)
-        }
+        WindowView(.init(width: (size * 0.85) * 0.9, height: (size * 0.85) * 0.9),
+                   image: Image(systemName: kind.systemName))
         .shadow(radius: 2)
       }
       .frame(width: size, height: size)
@@ -37,13 +44,13 @@ struct RelativeFocusIconView: View {
   }
 }
 
-private struct WindowView<Content>: View where Content == Image {
+private struct WindowView: View {
   let size: CGSize
-  private let content: () -> Content
+  private let image: Image
 
-  init(_ size: CGSize, content: @escaping () -> Content) {
+  init(_ size: CGSize, image: Image) {
     self.size = size
-    self.content = content
+    self.image = image
   }
 
   var body: some View {
@@ -62,7 +69,7 @@ private struct WindowView<Content>: View where Content == Image {
             .fill(.white)
             .frame(maxWidth: .infinity)
             .overlay {
-              content()
+              image
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .fontWeight(.heavy)
@@ -115,17 +122,10 @@ private struct TrafficLightsView: View {
   }
 }
 
-#Preview {
-  HStack(alignment: .top, spacing: 8) {
-    RelativeFocusIconView(.up, size: 192)
-    VStack(alignment: .leading, spacing: 8) {
-      RelativeFocusIconView(.up, size: 128)
-      HStack(alignment: .top, spacing: 8) {
-        RelativeFocusIconView(.up, size: 64)
-        RelativeFocusIconView(.up, size: 32)
-        RelativeFocusIconView(.up, size: 16)
-      }
-    }
-  }
-  .padding()
+#Preview("Up") {
+  IconPreview { RelativeFocusIconView(.up, size: $0) }
+}
+
+#Preview("Upper Left") {
+  IconPreview { RelativeFocusIconView(.upperLeft, size: $0) }
 }

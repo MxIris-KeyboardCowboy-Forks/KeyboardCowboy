@@ -3,10 +3,12 @@ import Foundation
 
 enum NewCommandPayload: Equatable {
   case placeholder
+  case bundled(command: BundledCommand)
   case builtIn(builtIn: BuiltInCommand)
   case script(value: String, kind: NewCommandScriptView.Kind, scriptExtension: NewCommandScriptView.ScriptExtension)
   case application(application: Application?, action: NewCommandApplicationView.ApplicationAction,
-                   inBackground: Bool, hideWhenRunning: Bool, ifNotRunning: Bool)
+                   inBackground: Bool, hideWhenRunning: Bool,
+                   ifNotRunning: Bool, waitForAppToLaunch: Bool, addToStage: Bool)
   case url(targetUrl: URL, application: Application?)
   case open(path: String, application: Application?)
   case shortcut(name: String)
@@ -37,12 +39,13 @@ enum NewCommandPayload: Equatable {
         case .source: "Run Shell Script"
         }
       }
-    case .application(let application, let action, _, _, _):
+    case .application(let application, let action, _, _, _, _, _):
       return switch action {
-      case .open:  "Open \(application?.displayName ?? "Application")"
-      case .close: "Close \(application?.displayName ?? "Application")"
-      case .hide:  "Hide \(application?.displayName ?? "Application")"
-      case .unhide:  "Unhide \(application?.displayName ?? "Application")"
+      case .open:   "Open \(application?.displayName ?? "Application")"
+      case .close:  "Close \(application?.displayName ?? "Application")"
+      case .hide:   "Hide \(application?.displayName ?? "Application")"
+      case .unhide: "Unhide \(application?.displayName ?? "Application")"
+      case .peek:   "Peek at \(application?.displayName ?? "Application")"
       }
     case .url(let targetUrl, let application):
       return if let application {
@@ -64,18 +67,13 @@ enum NewCommandPayload: Equatable {
         keyboardShortcutString.append(keyboardShortcut.stringValue)
       }
       return keyboardShortcutString
-    case .text:
-      return "Text editing"
-    case .systemCommand:
-      return "System Command"
-    case .menuBar:
-      return "MenuBar Command"
-    case .windowManagement:
-      return "Window Management Command"
-    case .mouse:
-      return "Mouse Command"
-    case .uiElement:
-      return "UI Element Command"
+    case .text:             return "Text editing"
+    case .systemCommand:    return "System Command"
+    case .menuBar:          return "MenuBar Command"
+    case .windowManagement: return "Window Management Command"
+    case .mouse:            return "Mouse Command"
+    case .uiElement:        return "UI Element Command"
+    case .bundled:          return "Bundled Command"
     }
   }
 }

@@ -1,7 +1,9 @@
 import Bonzai
+import Inject
 import SwiftUI
 
 struct NewCommandSystemCommandView: View {
+  @ObserveInjection var inject
   @Binding var payload: NewCommandPayload
   @Binding var validation: NewCommandValidation
 
@@ -17,62 +19,32 @@ struct NewCommandSystemCommandView: View {
       ZenLabel("System Command:")
 
       HStack {
-        switch kind {
-        case .activateLastApplication:
-          ActivateLastApplicationIconView(size: 24)
-        case .applicationWindows:
-          MissionControlIconView(size: 24)
-        case .minimizeAllOpenWindows:
-          MinimizeAllIconView(size: 24)
-        case .missionControl:
-          MissionControlIconView(size: 24)
-        case .moveFocusToNextWindow:
-          MoveFocusToWindowIconView(direction: .next, scope: .visibleWindows, size: 24)
-        case .moveFocusToNextWindowFront:
-          MoveFocusToWindowIconView(direction: .next, scope: .activeApplication, size: 24)
-        case .moveFocusToNextWindowGlobal:
-          MoveFocusToWindowIconView(direction: .next, scope: .allWindows, size: 24)
-        case .moveFocusToPreviousWindow:
-          MoveFocusToWindowIconView(direction: .previous, scope: .allWindows, size: 24)
-        case .moveFocusToPreviousWindowFront:
-          MoveFocusToWindowIconView(direction: .previous, scope: .activeApplication, size: 24)
-        case .moveFocusToPreviousWindowGlobal:
-          MoveFocusToWindowIconView(direction: .previous, scope: .allWindows, size: 24)
-        case .showDesktop:
-          DockIconView(size: 24)
-        case .moveFocusToNextWindowUpwards:
-          RelativeFocusIconView(.up, size: 24)
-        case .moveFocusToNextWindowDownwards:
-          RelativeFocusIconView(.down, size: 24)
-        case .moveFocusToNextWindowOnLeft:
-          RelativeFocusIconView(.left, size: 24)
-        case .moveFocusToNextWindowOnRight:
-          RelativeFocusIconView(.right, size: 24)
-        case .none:
-          EmptyView()
-        }
+        SystemIconBuilder.icon(kind, size: 24)
         Menu {
           ForEach(SystemCommand.Kind.allCases) { kind in
             Button {
               self.kind = kind
               validation = updateAndValidatePayload()
             } label: {
-              Image(systemName: kind.symbol)
-              Text(kind.displayValue)
+              HStack {
+                Image(systemName: kind.symbol)
+                Text(kind.displayValue)
+              }
             }
           }
         } label: {
           if let kind {
-            Image(systemName: kind.symbol)
-            Text(kind.displayValue)
+            HStack {
+              Image(systemName: kind.symbol)
+              Text(kind.displayValue)
+            }
           } else {
-            Text("Select system command")
+            Text("Select System Command")
           }
         }
       }
       .background(NewCommandValidationView($validation))
     }
-    .menuStyle(.regular)
     .onChange(of: validation, perform: { newValue in
       guard newValue == .needsValidation else { return }
       withAnimation { validation = updateAndValidatePayload() }
@@ -80,6 +52,7 @@ struct NewCommandSystemCommandView: View {
     .onAppear {
       validation = .unknown
     }
+    .enableInjection()
   }
 
   @discardableResult

@@ -1,4 +1,5 @@
 import Apps
+import Inject
 import Bonzai
 import SwiftUI
 
@@ -22,6 +23,7 @@ struct NewCommandMenuBarView: View {
 
   private let wikiUrl = URL(string: "https://github.com/zenangst/KeyboardCowboy/wiki/Commands#menu-bar-commands")!
 
+  @ObserveInjection var inject
   @Namespace var namespace
   @FocusState var focus: Focus?
   @Environment(\.resetFocus) var resetFocus
@@ -60,31 +62,8 @@ struct NewCommandMenuBarView: View {
         Spacer()
         Button(action: { NSWorkspace.shared.open(wikiUrl) },
                label: { Image(systemName: "questionmark.circle.fill") })
-        .buttonStyle(.calm(color: .systemYellow, padding: .small))
       }
       VStack {
-        Menu {
-          Button(action: {
-            application = nil
-            updateAndValidatePayload()
-          },
-                 label: { Text("Front Most Application") })
-          Divider()
-          ForEach(applicationStore.applications) { application in
-            Button(action: {
-              self.application = application
-              updateAndValidatePayload() },
-                   label: { Text(application.displayName) })
-          }
-        } label: {
-          if let application {
-            Text(application.displayName)
-          } else {
-            Text("Front Most Application")
-          }
-        }
-        .menuStyle(.zen(.init()))
-
         ScrollView {
           ForEach(tokens) { container in
             HStack {
@@ -120,32 +99,23 @@ struct NewCommandMenuBarView: View {
                 Image(systemName: "xmark")
                   .resizable()
                   .aspectRatio(contentMode: .fill)
-                  .frame(width: 8, height: 8)
+                  .frame(width: 8, height: 10)
               })
-              .buttonStyle(.calm(color: .systemRed, padding: .medium))
+              .buttonStyle(.destructive)
             }
-            .padding(4)
-            .background(
-              RoundedRectangle(cornerRadius: 4)
-                .stroke(Color( validation.isInvalid ? .systemRed : .white.withAlphaComponent(0.2)), lineWidth: 1)
-            )
-            .padding(1)
           }
+          .roundedSubStyle(padding: 8)
           .frame(maxWidth: .infinity, alignment: .topLeading)
           overlay()
+            .padding(.top, 8)
         }
         if !tokens.isEmpty {
-          Divider()
+          ZenDivider()
           addView()
+            .roundedSubStyle(padding: 8)
             .matchedGeometryEffect(id: "add-buttons", in: namespace)
         }
       }
-      .padding(16)
-      .background(
-        RoundedRectangle(cornerRadius: 8)
-          .fill(Color(.textBackgroundColor)
-            .opacity(0.5))
-      )
     }
     .onChange(of: validation, perform: { newValue in
       guard newValue == .needsValidation else { return }
@@ -160,6 +130,7 @@ struct NewCommandMenuBarView: View {
     }
     .focusScope(namespace)
     .frame(maxWidth: .infinity, alignment: .leading)
+    .enableInjection()
   }
 
   @discardableResult
@@ -174,14 +145,15 @@ struct NewCommandMenuBarView: View {
   @ViewBuilder
   func overlay() -> some View {
     if tokens.isEmpty {
-    VStack {
-      Divider()
-      Text("Enter the exact name of the menu command you want to add.")
-        .font(.caption)
-        .allowsHitTesting(false)
+      VStack {
         addView()
+          .roundedSubStyle(padding: 8)
           .matchedGeometryEffect(id: "add-buttons", in: namespace)
       }
+      ZenDivider()
+      Text("Enter the exact name of the menu command you want to add.")
+        .allowsHitTesting(false)
+        .roundedStyle()
     }
   }
 
@@ -209,11 +181,9 @@ struct NewCommandMenuBarView: View {
       } label: {
         Text(kind.rawValue)
       }
-      .menuStyle(.regular)
       .fixedSize()
 
       Button(action: { onSubmit() }, label: { Text("Add") })
-        .buttonStyle(.zen(.init(color: .systemGreen)))
     }
   }
 
@@ -246,7 +216,6 @@ private struct NewCommandMenuBarTokenMenuItemView: View {
 
   var body: some View {
     TextField("Menu item", text: $value)
-      .textFieldStyle(.regular(Color(.windowBackgroundColor)))
       .onSubmit(onSubmit)
   }
 }
@@ -275,7 +244,6 @@ private struct NewCommandMenuBarTokenMenuItemsView: View {
         .focused($focus, equals: .rhs)
         .onSubmit(onSubmit)
     }
-    .textFieldStyle(.regular(Color(.windowBackgroundColor)))
     .focusScope(namespace)
   }
 }

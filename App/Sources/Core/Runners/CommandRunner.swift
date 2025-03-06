@@ -1,23 +1,23 @@
-import Foundation
 import AppKit
 import Carbon
 import Combine
+import DynamicNotchKit
+import Foundation
 import MachPort
+import SwiftUI
 
 protocol CommandRunning {
-  func serialRun(_ commands: [Command], checkCancellation: Bool,
-                 resolveUserEnvironment: Bool, shortcut: KeyShortcut, machPortEvent: MachPortEvent,
-                 repeatingEvent: Bool)
-  func concurrentRun(_ commands: [Command], checkCancellation: Bool,
-                     resolveUserEnvironment: Bool, 
-                     shortcut: KeyShortcut, machPortEvent: MachPortEvent,
-                     repeatingEvent: Bool)
+  func serialRun(_ commands: [Command], checkCancellation: Bool, resolveUserEnvironment: Bool,
+                 machPortEvent: MachPortEvent, repeatingEvent: Bool)
+  func concurrentRun(_ commands: [Command], checkCancellation: Bool, resolveUserEnvironment: Bool,
+                     machPortEvent: MachPortEvent, repeatingEvent: Bool)
 }
 
 final class CommandRunner: CommandRunning, @unchecked Sendable {
   struct Runners {
     let application: ApplicationCommandRunner
     let builtIn: BuiltInCommandRunner
+    let bundled: BundledCommandRunner
     let keyboard: KeyboardCommandRunner
     let menubar: MenuBarCommandRunner
     let mouse: MouseCommandRunner
@@ -36,6 +36,7 @@ final class CommandRunner: CommandRunning, @unchecked Sendable {
     }
   }
 
+  private let applicationStore: ApplicationStore
   private let missionControl: MissionControlPlugin
   private let workspace: WorkspaceProviding
   private let commandPanel: CommandPanelCoordinator
@@ -45,6 +46,8 @@ final class CommandRunner: CommandRunning, @unchecked Sendable {
   private var subscription: AnyCancellable?
 
   let runners: Runners
+
+  private var notchInfo: DynamicNotchInfo = DynamicNotchInfo(title: "")
 
   @MainActor
   var lastExecutedCommand: Command?
@@ -59,6 +62,9 @@ final class CommandRunner: CommandRunning, @unchecked Sendable {
        systemCommandRunner: SystemCommandRunner,
        uiElementCommandRunner: UIElementCommandRunner
   ) {
+    let windowTidy = WindowTidyRunner()
+
+    self.applicationStore = applicationStore
     self.missionControl = MissionControlPlugin(keyboard: keyboardCommandRunner)
     self.commandPanel = CommandPanelCoordinator()
     self.runners = .init(
@@ -68,6 +74,7 @@ final class CommandRunner: CommandRunning, @unchecked Sendable {
         workspace: workspace
       ),
       builtIn: builtInCommandRunner,
+      bundled: BundledCommandRunner(applicationStore: applicationStore, systemRunner: systemCommandRunner, windowTidy: windowTidy),
       keyboard: keyboardCommandRunner,
       menubar: MenuBarCommandRunner(),
       mouse: MouseCommandRunner(),
@@ -110,22 +117,26 @@ final class CommandRunner: CommandRunning, @unchecked Sendable {
         }
       case .builtIn, .keyboard, .text,
           .systemCommand, .menuBar, .windowManagement, 
-          .mouse, .uiElement:
+          .mouse, .uiElement, .bundled:
         break
       }
     }
   }
 
   func serialRun(_ commands: [Command], checkCancellation: Bool,
-                 resolveUserEnvironment: Bool, 
-                 shortcut: KeyShortcut, machPortEvent: MachPortEvent,
+                 resolveUserEnvironment: Bool, machPortEvent: MachPortEvent,
                  repeatingEvent: Bool) {
     let originalPasteboardContents: String? = commands.shouldRestorePasteboard
     ? NSPasteboard.general.string(forType: .string)
     : nil
 
+    if commands.shouldAutoCancelledPreviousCommands {
+      concurrentTask?.cancel()
+      serialTask?.cancel()
+    }
+
     serialTask = Task.detached(priority: .userInitiated) { [weak self] in
-      await Benchmark.shared.start("CommandRunner.serialRun")
+      Benchmark.shared.start("CommandRunner.serialRun")
       guard let self else { return }
       do {
         let shouldDismissMissionControl = commands.contains(where: {
@@ -138,18 +149,28 @@ final class CommandRunner: CommandRunning, @unchecked Sendable {
         if shouldDismissMissionControl { await missionControl.dismissIfActive() }
         let snapshot = await UserSpace.shared.snapshot(resolveUserEnvironment: resolveUserEnvironment)
         var runtimeDictionary = [String: String]()
+
         for command in commands {
           if checkCancellation { try Task.checkCancellation() }
           do {
-            try await self.run(command, snapshot: snapshot, shortcut: shortcut, 
-                               machPortEvent: machPortEvent, 
+            try await self.run(command, workflowCommands: commands, snapshot: snapshot,
+                               machPortEvent: machPortEvent,
                                checkCancellation: checkCancellation,
                                repeatingEvent: repeatingEvent, runtimeDictionary: &runtimeDictionary)
-          } catch { }
+          } catch {
+            switch command.notification {
+            case .bezel:
+              await BezelNotificationController.shared.post(.init(id: UUID().uuidString, text: ""))
+            case .capsule:
+              await CapsuleNotificationWindow.shared.publish(error.localizedDescription, state: .failure)
+            case .commandPanel, .none: break
+            }
+          }
           if let delay = command.delay {
             try await Task.sleep(for: .milliseconds(delay))
           }
         }
+
         if commands.shouldRestorePasteboard {
           try await Task.sleep(for: .seconds(0.2))
           await MainActor.run { [originalPasteboardContents] in
@@ -160,13 +181,12 @@ final class CommandRunner: CommandRunning, @unchecked Sendable {
           }
         }
       }
-      await Benchmark.shared.stop("CommandRunner.serialRun")
+      Benchmark.shared.stop("CommandRunner.serialRun")
     }
   }
 
   func concurrentRun(_ commands: [Command], checkCancellation: Bool,
-                     resolveUserEnvironment: Bool, 
-                     shortcut: KeyShortcut, machPortEvent: MachPortEvent,
+                     resolveUserEnvironment: Bool, machPortEvent: MachPortEvent,
                      repeatingEvent: Bool) {
     var modifiedCheckCancellation = checkCancellation
     let originalPasteboardContents: String? = commands.shouldRestorePasteboard
@@ -175,6 +195,11 @@ final class CommandRunner: CommandRunning, @unchecked Sendable {
 
     if commands.filter({ $0.isEnabled }).count == 1 {
       modifiedCheckCancellation = false
+    }
+
+    if commands.shouldAutoCancelledPreviousCommands {
+      serialTask?.cancel()
+      concurrentTask?.cancel()
     }
 
     let checkCancellation = modifiedCheckCancellation
@@ -194,10 +219,18 @@ final class CommandRunner: CommandRunning, @unchecked Sendable {
       for command in commands {
         do {
           if checkCancellation { try Task.checkCancellation() }
-          try await self.run(command, snapshot: snapshot, shortcut: shortcut,
+          try await self.run(command, workflowCommands: commands, snapshot: snapshot,
                              machPortEvent: machPortEvent, checkCancellation: checkCancellation,
                              repeatingEvent: repeatingEvent, runtimeDictionary: &runtimeDictionary)
-        } catch { }
+        } catch {
+          switch command.notification {
+          case .bezel:
+            await BezelNotificationController.shared.post(.init(id: UUID().uuidString, text: ""))
+          case .capsule:
+            await CapsuleNotificationWindow.shared.publish(error.localizedDescription, state: .failure)
+          case .commandPanel, .none: break
+          }
+        }
       }
 
       if commands.shouldRestorePasteboard {
@@ -212,127 +245,159 @@ final class CommandRunner: CommandRunning, @unchecked Sendable {
     }
   }
 
-  func run(_ command: Command, snapshot: UserSpace.Snapshot, 
-           shortcut: KeyShortcut, machPortEvent: MachPortEvent,
-           checkCancellation: Bool, repeatingEvent: Bool, 
+  func run(_ command: Command, workflowCommands: [Command], snapshot: UserSpace.Snapshot,
+           machPortEvent: MachPortEvent, checkCancellation: Bool, repeatingEvent: Bool,
            runtimeDictionary: inout [String: String]) async throws {
-    do {
-      let id = UUID().uuidString
-      switch command.notification {
-      case .bezel:
-        await BezelNotificationController.shared.post(
-          .init(id: id, text: " ", running: true)
-        )
-      case .commandPanel:
-        switch command {
-        case .script(let scriptCommand):
-          await MainActor.run {
-            commandPanel.run(scriptCommand)
-          }
-        default:
-          assertionFailure("Not yet implemented.")
-          break
+    let contentID = UUID()
+    switch command.notification {
+    case .bezel:
+      await MainActor.run {
+        notchInfo.setContent(contentID: contentID, title: command.name, description: "Running...")
+        notchInfo.show(on: NSScreen.main ?? NSScreen.screens[0], for: 10.0)
+      }
+    case .capsule:
+      let capsule = await CapsuleNotificationWindow.shared
+      await capsule.open()
+      await capsule.publish("Running…", state: .running)
+    case .commandPanel:
+      switch command {
+      case .script(let scriptCommand):
+        await MainActor.run {
+          commandPanel.run(scriptCommand)
         }
-        return
-      case .none:
+      default:
+        assertionFailure("Not yet implemented.")
         break
       }
+      return
+    case .none:
+      break
+    }
 
-      let output: String
-      switch command {
-      case .application(let applicationCommand):
-        try await runners.application.run(applicationCommand, checkCancellation: checkCancellation)
-        output = command.name
-      case .builtIn(let builtInCommand):
-          output = try await runners.builtIn.run(
-            builtInCommand,
-            shortcut: shortcut,
-            machPortEvent: machPortEvent
-          )
-      case .keyboard(let keyboardCommand):
-        try runners.keyboard.run(keyboardCommand.keyboardShortcuts,
-                                 originalEvent: nil,
-                                 with: eventSource)
-        try await Task.sleep(for: .milliseconds(1))
-        output = command.name
-      case .menuBar(let menuBarCommand):
-        try await runners.menubar.execute(menuBarCommand, repeatingEvent: repeatingEvent)
-        output = command.name
-      case .mouse(let command):
-        try await runners.mouse.run(command, snapshot: snapshot)
-        output = command.name
-      case .open(let openCommand):
-        let path = snapshot.interpolateUserSpaceVariables(openCommand.path, runtimeDictionary: runtimeDictionary)
-        try await runners.open.run(path, checkCancellation: checkCancellation, application: openCommand.application)
+    let output: String
+    switch command {
+    case .application(let applicationCommand):
+      try await runners.application.run(applicationCommand, machPortEvent: machPortEvent,
+                                        checkCancellation: checkCancellation, snapshot: snapshot)
+      output = command.name
+    case .builtIn(let builtInCommand):
+      output = try await runners.builtIn.run(
+        builtInCommand,
+        snapshot: snapshot,
+        machPortEvent: machPortEvent
+      )
+    case .bundled(let bundledCommand):
+      output = try await runners.bundled.run(
+        bundledCommand: bundledCommand,
+        command: command,
+        commandRunner: self,
+        snapshot: snapshot,
+        machPortEvent: machPortEvent,
+        checkCancellation: checkCancellation,
+        repeatingEvent: repeatingEvent,
+        runtimeDictionary: &runtimeDictionary
+      )
+    case .keyboard(let keyboardCommand):
+      try await runners.keyboard.run(
+        keyboardCommand.keyboardShortcuts,
+        originalEvent: nil,
+        iterations: keyboardCommand.iterations,
+        with: eventSource
+      )
+      try await Task.sleep(for: .milliseconds(1))
+      output = command.name
+    case .menuBar(let menuBarCommand):
+      try await runners.menubar.execute(menuBarCommand, repeatingEvent: repeatingEvent)
+      output = command.name
+    case .mouse(let command):
+      try await runners.mouse.run(command, snapshot: snapshot)
+      output = command.name
+    case .open(let openCommand):
+      let path = await snapshot.interpolateUserSpaceVariables(openCommand.path, runtimeDictionary: runtimeDictionary)
+      try await runners.open.run(path, checkCancellation: checkCancellation, application: openCommand.application)
+      if !openCommand.name.isEmpty {
+        output = openCommand.name
+      } else {
         output = path
-      case .script(let scriptCommand):
-        let result = try await self.runners.script.run(
-          scriptCommand,
-          environment: snapshot.terminalEnvironment(),
-          checkCancellation: checkCancellation
-        )
+      }
+    case .script(let scriptCommand):
+      let result = try await self.runners.script.run(
+        scriptCommand,
+        environment: snapshot.terminalEnvironment(),
+        checkCancellation: checkCancellation
+      )
 
-        if let result = result {
-          if scriptCommand.meta.variableName != nil {
-            output = result
-          } else {
-            let trimmedResult = result.trimmingCharacters(in: .newlines)
-            output = command.name + " " + trimmedResult
-          }
+      if let result = result {
+        if scriptCommand.meta.variableName != nil {
+          output = result
         } else {
-          output = command.name
-        }
-      case .shortcut(let shortcutCommand):
-        let result = try await runners.shortcut.run(shortcutCommand, checkCancellation: checkCancellation)
-        if let result = result {
           let trimmedResult = result.trimmingCharacters(in: .newlines)
           output = command.name + " " + trimmedResult
-        } else {
-          output = command.name
         }
-      case .text(let typeCommand):
-        switch typeCommand.kind {
-        case .insertText(let typeCommand):
-          try await runners.text.run(
-            snapshot.interpolateUserSpaceVariables(typeCommand.input, runtimeDictionary: runtimeDictionary),
-            mode: typeCommand.mode
-          )
-          output = command.name
-        }
-      case .systemCommand(let systemCommand):
-        try await runners.system.run(
-          systemCommand, applicationRunner: runners.application,
-          checkCancellation: checkCancellation, snapshot: snapshot
-        )
+      } else {
         output = command.name
-      case .uiElement(let uiElementCommand):
-        try await runners.uiElement.run(uiElementCommand, checkCancellation: checkCancellation)
-        output = ""
-      case .windowManagement(let windowCommand):
-        try await runners.window.run(windowCommand)
-        output = ""
       }
-
-      if let variableName = command.meta.variableName {
-        runtimeDictionary[variableName] = output
+    case .shortcut(let shortcutCommand):
+      let result = try await runners.shortcut.run(shortcutCommand, 
+                                                  environment: snapshot.terminalEnvironment(),
+                                                  checkCancellation: checkCancellation)
+      if let result = result {
+        let trimmedResult = result.trimmingCharacters(in: .newlines)
+        output = command.name + " " + trimmedResult
+      } else {
+        output = command.name
       }
+    case .text(let typeCommand):
+      switch typeCommand.kind {
+      case .insertText(let typeCommand):
+        try await runners.text.run(typeCommand, snapshot: snapshot, runtimeDictionary: runtimeDictionary)
+        output = command.name
+      }
+    case .systemCommand(let systemCommand):
+      try await runners.system.run(
+        systemCommand,
+        workflowCommands: workflowCommands,
+        applicationRunner: runners.application,
+        runtimeDictionary: runtimeDictionary,
+        checkCancellation: checkCancellation, snapshot: snapshot
+      )
+      output = command.name
+    case .uiElement(let uiElementCommand):
+      try await runners.uiElement.run(uiElementCommand, checkCancellation: checkCancellation)
+      output = ""
+    case .windowManagement(let windowCommand):
+      try await runners.window.run(windowCommand)
 
-      switch command.notification {
-      case .bezel:
-        await MainActor.run {
-          lastExecutedCommand = command
-          BezelNotificationController.shared.post(.init(id: id, text: output))
+      if case .moveToNextDisplay(let mode) = windowCommand.kind,
+         case .center = mode {
+        let snapshot = await UserSpace.shared.snapshot(resolveUserEnvironment: false, refreshWindows: true)
+        Task.detached {
+          try await Task.sleep(for: .milliseconds(200))
+          try await SystemWindowTilingRunner.run(.center, snapshot: snapshot)
         }
-      case .commandPanel:
-        break // Add support for command windows
-      case .none:
-        break
       }
-    } catch {
-      if case .bezel = command.notification {
-        await BezelNotificationController.shared.post(.init(id: UUID().uuidString, text: ""))
+
+      output = ""
+    }
+
+    if let variableName = command.meta.variableName {
+      runtimeDictionary[variableName] = output
+    }
+
+    switch command.notification {
+    case .bezel:
+      await MainActor.run {
+        lastExecutedCommand = command
+        notchInfo.setContent(contentID: contentID, title: output, description: nil)
+        notchInfo.show(on: NSScreen.main ?? NSScreen.screens[0], for: 2.0)
       }
-      throw error
+    case .capsule:
+      let capsule = await CapsuleNotificationWindow.shared
+      await capsule.publish(output, state: .success)
+    case .commandPanel:
+      break // Add support for command windows
+    case .none:
+      break
     }
   }
 
@@ -341,6 +406,7 @@ final class CommandRunner: CommandRunning, @unchecked Sendable {
     self.machPort = machPort
     runners.setMachPort(machPort)
     UserSpace.shared.machPort = machPort
+    UserSpace.shared.subscribe(to: coordinator.$lastEventOrRebinding)
     WindowStore.shared.subscribe(to: coordinator.$flagsChanged)
     subscribe(to: coordinator.$event)
     runners.system.subscribe(to: coordinator.$flagsChanged)
@@ -368,6 +434,20 @@ final class CommandRunner: CommandRunning, @unchecked Sendable {
 }
 
 extension Collection where Element == Command {
+  var shouldAutoCancelledPreviousCommands: Bool {
+    contains(where: { command in
+      switch command {
+      case .bundled(let bundledCommand):
+        switch bundledCommand.kind {
+        case .appFocus, .workspace, .tidy:
+          return true
+        }
+      default:
+        return false
+      }
+    })
+  }
+
   var shouldRestorePasteboard: Bool {
     contains(where: { command in
       if case .text(let textCommand) = command,

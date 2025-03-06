@@ -1,17 +1,21 @@
-import Cocoa
+@preconcurrency import Cocoa
+import MachPort
 
 protocol ApplicationCommandRunnerDelegate: AnyObject {
+  @MainActor
   func applicationCommandRunnerWillRunApplicationCommand(_ command: ApplicationCommand)
 }
 
 final class ApplicationCommandRunner: @unchecked Sendable {
   private struct Plugins {
     let activate: ActivateApplicationPlugin
+    let addToStage: AddToStagePlugin
     let bringToFront: BringToFrontApplicationPlugin
     let close: CloseApplicationPlugin
     let hide: HideApplicationPlugin
     let unhide: UnhideApplicationPlugin
     let launch: LaunchApplicationPlugin
+    let wait: WaitUntilApplicationIsRunningPlugin
   }
 
   var delegate: ApplicationCommandRunnerDelegate?
@@ -26,16 +30,18 @@ final class ApplicationCommandRunner: @unchecked Sendable {
     self.workspace = workspace
     self.plugins = Plugins(
       activate: ActivateApplicationPlugin(),
+      addToStage: AddToStagePlugin(),
       bringToFront: BringToFrontApplicationPlugin(scriptCommandRunner),
       close: CloseApplicationPlugin(workspace: workspace),
       hide: HideApplicationPlugin(workspace: workspace, userSpace: .shared),
       unhide: UnhideApplicationPlugin(workspace: workspace, userSpace: .shared),
-      launch: LaunchApplicationPlugin(workspace: workspace)
+      launch: LaunchApplicationPlugin(workspace: workspace),
+      wait: WaitUntilApplicationIsRunningPlugin(workspace: workspace)
     )
   }
 
-  func run(_ command: ApplicationCommand, checkCancellation: Bool) async throws {
-    delegate?.applicationCommandRunnerWillRunApplicationCommand(command)
+  func run(_ command: ApplicationCommand, machPortEvent: MachPortEvent?, checkCancellation: Bool, snapshot: UserSpace.Snapshot) async throws {
+    await delegate?.applicationCommandRunnerWillRunApplicationCommand(command)
     if command.modifiers.contains(.onlyIfNotRunning) {
       let bundleIdentifiers = self.workspace.applications.compactMap(\.bundleIdentifier)
       if bundleIdentifiers.contains(command.application.bundleIdentifier) {
@@ -43,15 +49,28 @@ final class ApplicationCommandRunner: @unchecked Sendable {
       }
     }
 
-    if await command.application.bundleIdentifier == KeyboardCowboy.bundleIdentifier {
-      await NSApplication.shared.delegate?.applicationDidBecomeActive?(.openKeyboardCowboy)
+    if await command.application.bundleIdentifier == KeyboardCowboyApp.bundleIdentifier {
+      await MainActor.run {
+        NotificationCenter.default.post(name: .openKeyboardCowboy, object: nil)
+      }
+      return
     }
 
     switch command.action {
     case .open:  try await openApplication(command, checkCancellation: checkCancellation)
     case .close: try plugins.close.execute(command, checkCancellation: checkCancellation)
-    case .hide:  plugins.hide.execute(command)
+    case .hide:  plugins.hide.execute(command, snapshot: snapshot)
     case .unhide: plugins.unhide.execute(command)
+    case .peek:
+      guard let machPortEvent else { return }
+
+      await PeekApplicationPlugin.set(machPortEvent)
+
+      if machPortEvent.type == .keyDown {
+        try await openApplication(command, checkCancellation: checkCancellation)
+      } else if machPortEvent.type == .keyUp {
+        plugins.hide.execute(command, snapshot: snapshot)
+      }
     }
   }
 
@@ -65,6 +84,7 @@ final class ApplicationCommandRunner: @unchecked Sendable {
 
     if isBackgroundOrElectron {
       try await plugins.launch.execute(command, checkCancellation: checkCancellation)
+      try await plugins.wait.run(for: bundleIdentifier)
       return
     }
 
@@ -84,10 +104,20 @@ final class ApplicationCommandRunner: @unchecked Sendable {
         try await plugins.bringToFront.execute(checkCancellation: checkCancellation)
       }
     } else {
+      if command.modifiers.contains(.addToStage) {
+        if try await plugins.addToStage.execute(command) {
+          return
+        }
+      }
+
       try await plugins.launch.execute(command, checkCancellation: checkCancellation)
       if await !WindowStore.shared.windows.map(\.ownerName).contains(bundleName) {
         try? await plugins.activate.execute(command, checkCancellation: checkCancellation)
       }
+    }
+
+    if command.modifiers.contains(.waitForAppToLaunch) {
+      try await plugins.wait.run(for: bundleIdentifier)
     }
   }
 }

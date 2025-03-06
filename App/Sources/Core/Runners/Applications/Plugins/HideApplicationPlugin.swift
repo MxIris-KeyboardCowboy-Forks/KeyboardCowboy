@@ -1,3 +1,4 @@
+import Apps
 import Cocoa
 
 final class HideApplicationPlugin {
@@ -10,7 +11,14 @@ final class HideApplicationPlugin {
     self.userSpace = userSpace
   }
 
-  func execute(_ command: ApplicationCommand) {
+  func execute(_ command: ApplicationCommand, snapshot: UserSpace.Snapshot) {
+    if command.application.bundleIdentifier == Application.previousAppBundleIdentifier() {
+      if !snapshot.previousApplication.ref.isHidden {
+        _ = snapshot.previousApplication.ref.hide()
+      }
+      return
+    }
+
     guard let runningApplication = workspace
       .applications
       .first(where: { $0.bundleIdentifier == command.application.bundleIdentifier }),
@@ -18,11 +26,10 @@ final class HideApplicationPlugin {
       return
     }
 
-    guard workspace.frontApplication?.bundleIdentifier != command.application.bundleIdentifier else {
-      return
+    if workspace.frontApplication?.bundleIdentifier != command.application.bundleIdentifier {
+      userSpace.frontmostApplication.ref.activate(options: .activateIgnoringOtherApps)
     }
 
-    userSpace.frontMostApplication.ref.activate()
     _ = runningApplication.hide()
   }
 }

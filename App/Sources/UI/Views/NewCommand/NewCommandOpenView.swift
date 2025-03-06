@@ -1,8 +1,10 @@
 import Apps
 import Bonzai
+import Inject
 import SwiftUI
 
 struct NewCommandOpenView: View {
+  @ObserveInjection var inject
   enum Focus {
     case path
   }
@@ -30,15 +32,14 @@ struct NewCommandOpenView: View {
         Spacer()
         Button(action: { NSWorkspace.shared.open(wikiUrl) },
                label: { Image(systemName: "questionmark.circle.fill") })
-        .buttonStyle(.calm(color: .systemYellow, padding: .small))
       }
 
-      HStack {
+      HStack(spacing: 0) {
         ZStack(alignment: .bottomTrailing) {
           Image(nsImage: NSWorkspace().icon(forFile: (path as NSString).expandingTildeInPath))
             .resizable()
             .aspectRatio(contentMode: .fit)
-            .frame(width: 32)
+            .frame(width: 24)
 
           if let application {
             Image(nsImage: NSWorkspace().icon(forFile: application.path))
@@ -50,24 +51,22 @@ struct NewCommandOpenView: View {
         }
 
         TextField("Path", text: $path)
-          .textFieldStyle(FileSystemTextFieldStyle())
+          .textFieldStyle { textField in
+            textField.font = .title
+          }
           .focused($focus, equals: .path)
         Button("Browse", action: {
           openPanel.perform(.selectFile(type: nil, handler: { path in
             self.path = path
           }))
         })
-        .buttonStyle(.zen(.init(color: .systemTeal, grayscaleEffect: .constant(false))))
       }
-      .padding(4)
-      .background {
-        RoundedRectangle(cornerRadius: 4)
-          .stroke(Color(.white).opacity(0.2), lineWidth: 1)
-      }
-      .padding(.bottom, 8)
+      .roundedSubStyle()
+
+      ZenDivider()
 
       HStack(spacing: 32) {
-        Text("With application: ")
+        Text("With Application: ")
         Menu(content: {
           ForEach(applicationStore.applications) { app in
             Button(action: {
@@ -86,7 +85,6 @@ struct NewCommandOpenView: View {
         })
       }
     }
-    .menuStyle(.zen(.init(color: .systemGray)))
     .onAppear {
       validation = .valid
       updatePayload()
@@ -95,6 +93,7 @@ struct NewCommandOpenView: View {
     .onChange(of: self.path, perform: { newValue in
       updatePayload()
     })
+    .enableInjection()
   }
 
   private func updatePayload() {

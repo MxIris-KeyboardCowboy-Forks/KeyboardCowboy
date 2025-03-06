@@ -1,17 +1,18 @@
+import Apps
 import Combine
 import Cocoa
 import MachPort
 
 final class ApplicationTriggerController: @unchecked Sendable, ApplicationCommandRunnerDelegate {
   private let workflowRunner: WorkflowRunning
-  private var activateActions = [String: [Workflow]]()
+  private var activateActions = [String: [ApplicationTriggerWorkflow]]()
   private var bundleIdentifiers = [String]()
-  private var closeActions = [String: [Workflow]]()
+  private var closeActions = [String: [ApplicationTriggerWorkflow]]()
   private var frontmostApplicationSubscription: AnyCancellable?
-  private var openActions = [String: [Workflow]]()
+  private var openActions = [String: [ApplicationTriggerWorkflow]]()
   private var runningApplicationsSubscription: AnyCancellable?
   private var workflowGroupsSubscription: AnyCancellable?
-  private var resignActions = [String: [Workflow]]()
+  private var resignActions = [String: [ApplicationTriggerWorkflow]]()
   private var previousApplication: UserSpace.Application?
 
   init(_ workflowRunner: WorkflowRunning) {
@@ -20,22 +21,35 @@ final class ApplicationTriggerController: @unchecked Sendable, ApplicationComman
 
   func subscribe(to publisher: Published<[UserSpace.Application]>.Publisher) {
     runningApplicationsSubscription = publisher
-      .sink { [weak self] in self?.process($0.map { $0.bundleIdentifier }) }
+      .sink { [weak self] bundleIdentifiers in
+        guard let self else { return }
+        DispatchQueue.main.async {
+          self.process(bundleIdentifiers.map { $0.bundleIdentifier }) }
+      }
   }
 
   func subscribe(to publisher: Published<UserSpace.Application>.Publisher) {
     frontmostApplicationSubscription = publisher
-      .sink { [weak self] in
-        self?.process($0)
+      .sink { [weak self] frontmostApplication in
+        guard let self else { return }
+        DispatchQueue.main.async {
+          self.process(frontmostApplication)
+        }
       }
   }
 
   func subscribe(to publisher: Published<[WorkflowGroup]>.Publisher) {
-    workflowGroupsSubscription = publisher.sink { [weak self] in self?.receive($0) }
+    workflowGroupsSubscription = publisher.sink { [weak self] groups in
+      guard let self else { return }
+      DispatchQueue.main.async {
+        self.receive(groups)
+      }
+    }
   }
 
   // MARK: Private methods
 
+  @MainActor
   private func receive(_ groups: [WorkflowGroup]) {
     self.activateActions.removeAll()
     self.resignActions.removeAll()
@@ -43,8 +57,14 @@ final class ApplicationTriggerController: @unchecked Sendable, ApplicationComman
     self.closeActions.removeAll()
     self.activateActions.removeAll()
 
-    let workflows = groups.flatMap({ $0.workflows })
-    workflows.forEach { workflow in
+    let triggerWorkflows: [ApplicationTriggerWorkflow] = groups
+      .filter { !$0.isDisabled }
+      .flatMap { group in
+        group.workflows.map({ ApplicationTriggerWorkflow(userModes: Set(group.userModes.map(\.asEnabled)),
+                                                         workflow: $0) })
+      }
+
+    triggerWorkflows.forEach { workflow in
       guard workflow.isEnabled else { return }
       switch workflow.trigger {
       case .application(let triggers):
@@ -65,45 +85,66 @@ final class ApplicationTriggerController: @unchecked Sendable, ApplicationComman
             self.resignActions[trigger.application.bundleIdentifier, default: []].append(workflow)
           }
         }
-      case .keyboardShortcuts, .snippet, .none:
+      case .keyboardShortcuts, .snippet, .modifier, .none:
         return
       }
     }
   }
 
-  private func process(_ frontMostApplication: UserSpace.Application) {
-    if let workflows = self.activateActions[frontMostApplication.bundleIdentifier] {
-      workflows.forEach(workflowRunner.runCommands(in:))
+  @MainActor
+  private func process(_ frontmostApplication: UserSpace.Application) {
+    if let anyAppTriggerWorkflows = self.activateActions[Application.anyAppBundleIdentifier()] {
+      runTriggerWorkflows(anyAppTriggerWorkflows)
     }
 
-    if let previousApplication, let workflows = self.resignActions[previousApplication.bundleIdentifier] {
-      workflows.forEach(workflowRunner.runCommands(in:))
+    if let triggerWorkflows = self.activateActions[frontmostApplication.bundleIdentifier] {
+      runTriggerWorkflows(triggerWorkflows)
     }
-    previousApplication = frontMostApplication
+
+    if let previousApplication, let triggerWorkflows = self.resignActions[previousApplication.bundleIdentifier] {
+      runTriggerWorkflows(triggerWorkflows)
+    }
+    previousApplication = frontmostApplication
   }
 
+  @MainActor
   private func process(_ bundleIdentifiers: [String]) {
     let difference = bundleIdentifiers.difference(from: self.bundleIdentifiers)
 
     if difference.isEmpty { return }
 
-    var workflows = [Workflow]()
+    var triggerWorkflows = [ApplicationTriggerWorkflow]()
     for change in difference {
       switch change {
       case .insert(_, let bundleIdentifier, _):
         if let openActions = openActions[bundleIdentifier] {
-          workflows.append(contentsOf: openActions)
+          triggerWorkflows.append(contentsOf: openActions)
         }
       case .remove(_, let bundleIdentifier, _):
         if let closeActions = closeActions[bundleIdentifier] {
-          workflows.append(contentsOf: closeActions)
+          triggerWorkflows.append(contentsOf: closeActions)
         }
       }
     }
 
-    workflows.forEach(workflowRunner.runCommands(in:))
+    runTriggerWorkflows(triggerWorkflows)
 
     self.bundleIdentifiers = bundleIdentifiers
+  }
+
+  @MainActor
+  private func runTriggerWorkflows(_ triggerWorkflows: [ApplicationTriggerWorkflow]) {
+    let userModes = Set(UserSpace.shared.userModes.filter(\.isEnabled))
+    triggerWorkflows
+      .filter {
+        if $0.userModes.isEmpty {
+          true
+        } else {
+          $0.userModes.isSubset(of: userModes)
+        }
+      }
+      .map(\.workflow)
+      .forEach(workflowRunner.runCommands(in:))
   }
 
   // MARK: ApplicationCommandRunnerDelegate
@@ -111,12 +152,60 @@ final class ApplicationTriggerController: @unchecked Sendable, ApplicationComman
   func applicationCommandRunnerWillRunApplicationCommand(_ command: ApplicationCommand) {
     switch command.action {
     case .open:
-      if let previousApplication, let workflows = self.resignActions[previousApplication.bundleIdentifier] {
-        workflows.forEach(workflowRunner.runCommands(in:))
+      if let previousApplication, let triggerWorkflows = self.resignActions[previousApplication.bundleIdentifier] {
+        runTriggerWorkflows(triggerWorkflows)
       }
     default:
       break
     }
+  }
+}
 
+private struct ApplicationTriggerWorkflow {
+  let userModes: Set<UserMode>
+  let workflow: Workflow
+
+  var isEnabled: Bool { workflow.isEnabled }
+  var trigger: Workflow.Trigger? { workflow.trigger }
+}
+
+extension Application {
+  static func anyAppBundleIdentifier() -> String {
+    "*.*.*"
+  }
+
+  static func currentAppBundleIdentifier() -> String {
+    "*.*.current"
+  }
+
+  static func previousAppBundleIdentifier() -> String {
+    "*.*.previous"
+  }
+
+  static func anyApplication() -> Application {
+    Application(
+      bundleIdentifier: anyAppBundleIdentifier(),
+      bundleName: "Any Application",
+      displayName: "Any Application",
+      path: "Any Application"
+    )
+  }
+
+  static func currentApplication() -> Application {
+    Application(
+      bundleIdentifier: currentAppBundleIdentifier(),
+      bundleName: "Current Application",
+      displayName: "Current Application",
+      path: "Current Application"
+    )
+  }
+
+  static func previousApplication() -> Application {
+    Application(
+      bundleIdentifier: previousAppBundleIdentifier(),
+      bundleName: "Previous Application",
+      displayName: "Previous Application",
+      path: "Previous Application"
+    )
   }
 }

@@ -56,9 +56,7 @@ struct MoveFocusToWindowIconView: View {
       }
       .frame(width: size, height: size)
       .fixedSize()
-      .drawingGroup(opaque: true)
       .iconShape(size)
-
   }
 
   func windowsXOffset(for scope: Scope) -> CGFloat {
@@ -179,18 +177,7 @@ private struct MoveFocusToWindowIconBackgroundView: View {
   VStack {
     ForEach(MoveFocusToWindowIconView.Scope.allCases, id: \.self) { scope in
     ForEach(MoveFocusToWindowIconView.Direction.allCases, id: \.self) { direction in
-        HStack(alignment: .top, spacing: 8) {
-          MoveFocusToWindowIconView(direction: direction, scope: scope, size: 192)
-          VStack(alignment: .leading, spacing: 8) {
-            MoveFocusToWindowIconView(direction: direction, scope: scope, size: 128)
-            HStack(alignment: .top, spacing: 8) {
-              MoveFocusToWindowIconView(direction: direction, scope: scope, size: 64)
-              MoveFocusToWindowIconView(direction: direction, scope: scope, size: 32)
-              MoveFocusToWindowIconView(direction: direction, scope: scope, size: 16)
-            }
-          }
-        }
-          .padding()
+      IconPreview { MoveFocusToWindowIconView(direction: direction, scope: scope, size: $0) }
       }
     }
   }

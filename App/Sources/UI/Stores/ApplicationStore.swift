@@ -30,8 +30,15 @@ final class ApplicationStore: ObservableObject, @unchecked Sendable {
 
   func applicationsToOpen(_ path: String) -> [Application] {
     guard let url = URL(string: path) else { return [] }
-    return NSWorkspace.shared.urlsForApplications(toOpen: url)
+    var applications =  NSWorkspace.shared.urlsForApplications(toOpen: url)
       .compactMap { application(at: $0) }
+
+    if url.isWebURL {
+      let webApps = ApplicationStore.shared.applications.filter({ $0.bundleIdentifier.contains("com.apple.Safari.WebApp") })
+      applications.append(contentsOf: webApps)
+    }
+
+    return applications.sorted(by: { $0.displayName.lowercased() < $1.displayName.lowercased() })
   }
 
   func application(at url: URL) -> Application? {
@@ -45,9 +52,8 @@ final class ApplicationStore: ObservableObject, @unchecked Sendable {
   }
 
   func load() async {
-    await Benchmark.shared.start("ApplicationController.load")
     let decoder = JSONDecoder()
-    let additionalPaths = AppStorageContainer.shared.additionalApplicationPaths
+    let additionalPaths = await AppStorageContainer.shared.additionalApplicationPaths
     if let newApplications: [Application] = try? AppCache.load(Self.domain, name: "applications.json", decoder: decoder) {
       do {
         var applicationDictionary = [String: Application]()
@@ -70,18 +76,17 @@ final class ApplicationStore: ObservableObject, @unchecked Sendable {
     } else {
       await reload(additionalPaths)
     }
-    await Benchmark.shared.stop("ApplicationController.load")
   }
 
   // MARK: - Private methods
 
   private func reload(_ additionalPaths: [String]) async {
-    await Benchmark.shared.start("ApplicationController.reload")
+    Benchmark.shared.start("ApplicationController.reload")
     let additionalDirectories = additionalPaths.map {
       URL(filePath: $0)
     }
     let newApplications = await ApplicationController.load(additionalDirectories)
-    await Benchmark.shared.stop("ApplicationController.reload")
+    Benchmark.shared.stop("ApplicationController.reload")
 
     if applications != newApplications {
       var applicationDictionary = [String: Application]()
@@ -91,10 +96,15 @@ final class ApplicationStore: ObservableObject, @unchecked Sendable {
         applicationsByPath[application.path] = application
       }
 
-      await MainActor.run { [applicationDictionary, applicationsByPath] in
-        self.applications = newApplications
-        self.dictionary = applicationDictionary
-        self.applicationsByPath = applicationsByPath
+      Task.detached(priority: .high) {
+        let sortedApplications = newApplications.sorted(by: {
+          $0.displayName.lowercased() < $1.displayName.lowercased()
+        })
+        await MainActor.run { [applicationDictionary, applicationsByPath] in
+          self.applications = sortedApplications
+          self.dictionary = applicationDictionary
+          self.applicationsByPath = applicationsByPath
+        }
       }
     }
 

@@ -3,11 +3,11 @@ import Foundation
 import Env
 
 // MARK: - Project
-
 let bundleId = "com.zenangst.Keyboard-Cowboy"
 
 func xcconfig(_ targetName: String) -> String { "Configurations/\(targetName).xcconfig" }
-func sources(_ folder: String) -> SourceFilesList { "\(folder)/Sources/**" }
+func sources(_ folder: String) -> SourceFileGlob { "\(folder)/Sources/**" }
+func xpcSources() -> SourceFileGlob { "XPC/Sources/**" }
 func resources(_ folder: String) -> ResourceFileElements { "\(folder)/Resources/**" }
 
 let rootPath = URL(fileURLWithPath: String(#filePath))
@@ -17,6 +17,9 @@ let rootPath = URL(fileURLWithPath: String(#filePath))
 let assetPath = rootPath.appending("Assets")
 let envPath = rootPath.appending(".env")
 let env = EnvHelper(envPath)
+let shell = Shell(path: rootPath)
+let buildNumber = ((try? shell.run("git rev-list --count HEAD")) ?? "x.x.x").trimmingCharacters(in: .whitespacesAndNewlines)
+
 // Main application target
 let mainAppTarget = Target.target(
   name: "Keyboard-Cowboy",
@@ -25,7 +28,7 @@ let mainAppTarget = Target.target(
   bundleId: "com.zenangst.Keyboard-Cowboy",
   deploymentTargets: .macOS("13.0"),
   infoPlist: .file(path: .relativeToRoot("App/Info.plist")),
-  sources: sources("App"),
+  sources: SourceFilesList(arrayLiteral: sources("App"), xpcSources()),
   resources: resources("App"),
   entitlements: "App/Entitlements/com.zenangst.Keyboard-Cowboy.entitlements",
   dependencies: [
@@ -33,6 +36,7 @@ let mainAppTarget = Target.target(
     .package(product: "Apps"),
     .package(product: "Bonzai"),
     .package(product: "Dock"),
+    .package(product: "DynamicNotchKit"),
     .package(product: "Inject"),
     .package(product: "InputSources"),
     .package(product: "Intercom"),
@@ -41,6 +45,7 @@ let mainAppTarget = Target.target(
     .package(product: "MachPort"),
     .package(product: "Sparkle"),
     .package(product: "Windows"),
+//    .target(name: "LassoService")
   ],
   settings:
     Settings.settings(
@@ -48,11 +53,13 @@ let mainAppTarget = Target.target(
         "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
         "CODE_SIGN_IDENTITY": "Apple Development",
         "CODE_SIGN_STYLE": "Automatic",
-        "CURRENT_PROJECT_VERSION": "905",
+        "CURRENT_PROJECT_VERSION": SettingValue(stringLiteral: buildNumber),
         "DEVELOPMENT_TEAM": env["TEAM_ID"],
         "ENABLE_HARDENED_RUNTIME": true,
-        "MARKETING_VERSION": "3.24.2",
-        "PRODUCT_NAME": "Keyboard Cowboy"
+        "MARKETING_VERSION": "3.27.0",
+        "PRODUCT_NAME": "Keyboard Cowboy",
+        "SWIFT_STRICT_CONCURRENCY": "complete",
+        "SWIFT_VERSION": "6.0",
       ],
       configurations: [
         .debug(name: "Debug", xcconfig: "\(xcconfig("Debug"))"),
@@ -68,7 +75,7 @@ let unitTestTarget = Target.target(
   bundleId: bundleId.appending(".unit-tests"),
   deploymentTargets: .macOS("13.0"),
   infoPlist: .file(path: .relativeToRoot("UnitTests/Info.plist")),
-  sources: sources("UnitTests"),
+  sources: SourceFilesList(arrayLiteral: sources("UnitTests")),
   dependencies: [
     .target(name: "Keyboard-Cowboy")
   ],
@@ -80,6 +87,54 @@ let unitTestTarget = Target.target(
       "DEVELOPMENT_TEAM": env["TEAM_ID"],
       "PRODUCT_BUNDLE_IDENTIFIER": "\(bundleId).UnitTests",
       "TEST_HOST": "$(BUILT_PRODUCTS_DIR)/Keyboard Cowboy.app/Contents/MacOS/Keyboard Cowboy",
+    ])
+)
+
+let assetGeneratorTarget = Target.target(
+  name: "AssetGenerator",
+  destinations: .macOS,
+  product: .unitTests,
+  bundleId: bundleId.appending(".asset-generator"),
+  deploymentTargets: .macOS("13.0"),
+  infoPlist: .file(path: .relativeToRoot("AssetGenerator/Info.plist")),
+  sources: SourceFilesList(arrayLiteral: sources("AssetGenerator")),
+  dependencies: [
+    .target(name: "Keyboard-Cowboy")
+  ],
+  settings:
+    Settings.settings(base: [
+      "BUNDLE_LOADER": "$(TEST_HOST)",
+      "CODE_SIGN_IDENTITY": "Apple Development",
+      "CODE_SIGN_STYLE": "-",
+      "DEVELOPMENT_TEAM": env["TEAM_ID"],
+      "PRODUCT_BUNDLE_IDENTIFIER": "\(bundleId).AssetGenerator",
+      "TEST_HOST": "$(BUILT_PRODUCTS_DIR)/Keyboard Cowboy.app/Contents/MacOS/Keyboard Cowboy",
+    ])
+)
+
+let xpcTarget = Target.target(
+    name: "LassoService",
+    destinations: .macOS,
+    product: .xpc,
+    bundleId: "com.zenangst.Keyboard-Cowboy.LassoService",
+    deploymentTargets: .macOS("13.0"),
+    infoPlist: .file(path: .relativeToRoot("LassoService/Info.plist")),
+    sources: SourceFilesList(arrayLiteral: sources("LassoService"), xpcSources()),
+    entitlements: "LassoService/Entitlements/com.zenangst.Keyboard-Cowboy.LassoService.entitlements",
+    dependencies: [
+        .package(product: "Apps"),
+        .package(product: "KeyCodes"),
+        .package(product: "InputSources"),
+        .package(product: "MachPort"),
+    ],
+    settings: Settings.settings(base: [
+        "CODE_SIGN_IDENTITY": "Apple Development",
+        "CODE_SIGN_STYLE": "Automatic",
+        "DEVELOPMENT_TEAM": env["TEAM_ID"],
+        "ENABLE_HARDENED_RUNTIME": true,
+        "PRODUCT_NAME": "LassoService",
+        "SWIFT_STRICT_CONCURRENCY": "complete",
+        "SWIFT_VERSION": "6.0",
     ])
 )
 
@@ -95,7 +150,9 @@ let project = Project(
   ], defaultSettings: .recommended),
   targets: [
     mainAppTarget,
-    unitTestTarget
+    unitTestTarget,
+    assetGeneratorTarget,
+    xpcTarget,
   ],
   schemes: [
     Scheme.scheme(
@@ -107,7 +164,8 @@ let project = Project(
         [.testableTarget(target: .target(unitTestTarget.name))],
         arguments: .arguments(
           environmentVariables: [
-            "ASSET_PATH": .environmentVariable(value: assetPath, isEnabled: true)
+            "ASSET_PATH": .environmentVariable(value: assetPath, isEnabled: true),
+            "SOURCE_ROOT": .environmentVariable(value: rootPath, isEnabled: true),
           ],
           launchArguments: [
             .launchArgument(name: "-running-unit-tests", isEnabled: true)
@@ -122,14 +180,15 @@ let project = Project(
         executable: .target(mainAppTarget.name),
         arguments: .arguments(
           environmentVariables: [
-            "SOURCE_ROOT": .environmentVariable(value: "$(SRCROOT)", isEnabled: true),
-            "APP_ENVIRONMENT_OVERRIDE": .environmentVariable(value: "development", isEnabled: true)
+            "APP_ENVIRONMENT_OVERRIDE": .environmentVariable(value: "development", isEnabled: true),
+            "SOURCE_ROOT": .environmentVariable(value: rootPath, isEnabled: true),
           ],
           launchArguments: [
             .launchArgument(name: "-benchmark", isEnabled: false),
             .launchArgument(name: "-debugEditing", isEnabled: false),
             .launchArgument(name: "-injection", isEnabled: false),
             .launchArgument(name: "-disableMachPorts", isEnabled: false),
+            .launchArgument(name: "-openWindowAtLaunch", isEnabled: true)
           ]
         )
       )
@@ -155,12 +214,13 @@ public enum PackageResolver {
     let packages: [Package]
     if env["PACKAGE_DEVELOPMENT"] == "true" {
       packages = [
-        .package(url: "https://github.com/krzysztofzablocki/Inject.git", from: "1.1.0"),
+        .package(url: "https://github.com/krzysztofzablocki/Inject.git", from: "1.5.2"),
         .package(url: "https://github.com/sparkle-project/Sparkle.git", from: "2.4.1"),
         .package(path: "../AXEssibility"),
-        .package(path: "../Bonzai"),
         .package(path: "../Apps"),
+        .package(path: "../Bonzai"),
         .package(path: "../Dock"),
+        .package(path: "../DynamicNotchKit"),
         .package(path: "../InputSources"),
         .package(path: "../Intercom"),
         .package(path: "../KeyCodes"),
@@ -170,18 +230,19 @@ public enum PackageResolver {
       ]
     } else {
       packages = [
-        .package(url: "https://github.com/krzysztofzablocki/Inject.git", from: "1.1.0"),
+        .package(url: "https://github.com/krzysztofzablocki/Inject.git", from: "1.5.2"),
         .package(url: "https://github.com/sparkle-project/Sparkle.git", from: "2.4.1"),
-        .package(url: "https://github.com/zenangst/AXEssibility.git", from: "0.1.3"),
-        .package(url: "https://github.com/zenangst/Bonzai.git", .revision("e8bb0b48cce45ab33de90982ce107ca5cad51c02")),
-        .package(url: "https://github.com/zenangst/Apps.git", from: "1.4.2"),
+        .package(url: "https://github.com/zenangst/AXEssibility.git", .revision("4a06484fd379c2eb34487c467aca043ac2048ee5")),
+        .package(url: "https://github.com/zenangst/Apps.git", .revision("98b33d6236cfe912d4accf4e0365fb327b9bca51")),
+        .package(url: "https://github.com/zenangst/Bonzai.git", .revision("26c16972a31500fefcb9ce2e8912947c4128e85c")),
         .package(url: "https://github.com/zenangst/Dock.git", from: "1.0.1"),
-        .package(url: "https://github.com/zenangst/InputSources.git", from: "1.0.1"),
+        .package(url: "https://github.com/zenangst/DynamicNotchKit", .revision("40abe91486627499783f470c4dedb5267df2f0be")),
+        .package(url: "https://github.com/zenangst/InputSources.git", from: "1.1.0"),
         .package(url: "https://github.com/zenangst/Intercom.git", .revision("5a340e185e571d058c09ab8b8ad8716098282443")),
-        .package(url: "https://github.com/zenangst/KeyCodes.git", from: "4.1.1"),
+        .package(url: "https://github.com/zenangst/KeyCodes.git", from: "5.0.0"),
         .package(url: "https://github.com/zenangst/LaunchArguments.git", from: "1.0.2"),
-        .package(url: "https://github.com/zenangst/MachPort.git", from: "4.2.0"),
-        .package(url: "https://github.com/zenangst/Windows.git", from: "1.2.1"),
+        .package(url: "https://github.com/zenangst/MachPort.git", .revision("3eeeae89b701aeef8238d239323e64d77bd156d7")),
+        .package(url: "https://github.com/zenangst/Windows.git", from: "1.2.2"),
       ]
     }
     return packages

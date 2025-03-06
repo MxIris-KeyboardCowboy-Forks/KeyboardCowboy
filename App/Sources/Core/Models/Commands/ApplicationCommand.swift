@@ -8,14 +8,18 @@ struct ApplicationCommand: MetaDataProviding {
     public var id: String { return self.rawValue }
     public var displayValue: String {
       switch self {
-      case .background: return "Open in background"
-      case .hidden: return "Hide when opening"
-      case .onlyIfNotRunning: return "Open if not running"
+      case .background: "Open in background"
+      case .hidden: "Hide when opening"
+      case .onlyIfNotRunning: "Open if not running"
+      case .addToStage: "Add to current stage"
+      case .waitForAppToLaunch: "Wait for app to launch"
       }
     }
     case background
     case hidden
     case onlyIfNotRunning
+    case addToStage
+    case waitForAppToLaunch
   }
 
   enum Action: String, Codable, Hashable, Equatable, Sendable {
@@ -26,9 +30,10 @@ struct ApplicationCommand: MetaDataProviding {
       case .close: "Close"
       case .hide:  "Hide"
       case .unhide: "Unhide"
+      case .peek: "Peek"
       }
     }
-    case open, close, hide, unhide
+    case open, close, hide, unhide, peek
   }
 
   var application: Application
@@ -48,6 +53,13 @@ struct ApplicationCommand: MetaDataProviding {
     self.action = action
   }
 
+  enum CodingKeys: CodingKey {
+    case application
+    case action
+    case modifiers
+    case meta
+  }
+
   init(action: Action, application: Application,
        meta: Command.MetaData, modifiers: [Modifier]) {
     self.application = application
@@ -60,12 +72,24 @@ struct ApplicationCommand: MetaDataProviding {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     self.application = try container.decode(Application.self, forKey: .application)
     self.action = try container.decode(ApplicationCommand.Action.self, forKey: .action)
-    self.modifiers = try container.decode(Set<ApplicationCommand.Modifier>.self, forKey: .modifiers)
+    self.modifiers = try container.decodeIfPresent(Set<ApplicationCommand.Modifier>.self, forKey: .modifiers) ?? []
     do {
       self.meta = try container.decode(Command.MetaData.self, forKey: .meta)
     } catch {
       self.meta = try MetaDataMigrator.migrate(decoder)
     }
+  }
+
+  func encode(to encoder: any Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    let sortedModifiers = self.modifiers.sorted(by: { $0.rawValue < $1.rawValue  })
+
+    try container.encode(self.application, forKey: .application)
+    try container.encode(self.action, forKey: .action)
+    if !sortedModifiers.isEmpty {
+      try container.encode(sortedModifiers, forKey: .modifiers)
+    }
+    try container.encode(self.meta, forKey: .meta)
   }
 
   func copy() -> ApplicationCommand {

@@ -1,7 +1,9 @@
 import Bonzai
+import Inject
 import SwiftUI
 
 struct NewCommandUIElementView: View {
+  @ObserveInjection var inject
   @EnvironmentObject var captureStore: UIElementCaptureStore
   @Binding var payload: NewCommandPayload
   @Binding var validation: NewCommandValidation
@@ -24,19 +26,18 @@ struct NewCommandUIElementView: View {
             captureButton()
           }
         }
-        .padding(.vertical, 8)
 
         if predicates.isEmpty {
-          HStack(alignment: .top) {
-            UIElementIconView(size: 24)
-            Text("Start recording and then click on the UI Element you want to capture while holding the ⌘-Command key.")
-              .frame(maxWidth: 320, alignment: .leading)
+          VStack {
+            HStack {
+              UIElementIconView(size: 24)
+              Text("Start recording and then click on the UI Element you want to capture while holding the ⌘-key.")
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
             captureButton()
           }
           .frame(maxWidth: .infinity)
-          .padding()
-          .background()
-          .clipShape(RoundedRectangle(cornerRadius: 8))
+          .roundedStyle(padding: 8)
         }
 
         ForEach(predicates.indices, id: \.self) { index in
@@ -60,10 +61,8 @@ struct NewCommandUIElementView: View {
                     .font(.caption)
                 }
                 .fixedSize()
-                .menuStyle(.regular)
 
                 TextField("", text: $predicates[index].value)
-                  .textFieldStyle(.regular(Color(.windowBackgroundColor)))
                   .onChange(of: predicates[index].value, perform: { value in
                     validation = updateAndValidatePayload()
                   })
@@ -82,13 +81,9 @@ struct NewCommandUIElementView: View {
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 10, height: 10)
                 })
-                .padding(.top, 2)
-                .buttonStyle(.zen(.init(calm: true, color: .systemRed,
-                                        focusEffect: .constant(true),
-                                        hoverEffect: .constant(true))))
+                .buttonStyle(.destructive)
               }
             }
-            .padding([.top, .horizontal], 8)
 
             ZenDivider()
 
@@ -110,80 +105,135 @@ struct NewCommandUIElementView: View {
                   Text(predicates[index].kind.displayName)
                     .font(.caption)
                 }
-                .menuStyle(.regular)
 
                 ForEach(UIElementCommand.Predicate.Properties.allCases) { property in
                   HStack {
-                    ZenCheckbox(
-                      isOn: Binding<Bool>(
-                        get: { predicates[index].properties.contains(property) },
-                        set: {
-                          if $0 {
-                            predicates[index].properties.append(property)
-                          } else {
-                            predicates[index].properties.removeAll(where: { $0 == property })
-                          }
-                          validation = updateAndValidatePayload()
+                    Toggle(isOn: Binding<Bool>(
+                      get: { predicates[index].properties.contains(property) },
+                      set: {
+                        if $0 {
+                          predicates[index].properties.append(property)
+                        } else {
+                          predicates[index].properties.removeAll(where: { $0 == property })
                         }
-                      )
-                    )
-                    Text(property.displayName)
-                      .font(.caption)
-                      .lineLimit(1)
-                      .truncationMode(.tail)
-                      .allowsTightening(true)
+                        validation = updateAndValidatePayload()
+                      }
+                    ), label: {
+                      Text(property.displayName)
+                    })
                   }
                 }
               }
             }
-            .padding([.bottom, .horizontal], 8)
           }
-          .background()
-          .clipShape(RoundedRectangle(cornerRadius: 12))
+          .roundedSubStyle(padding: 8)
         }
       }
 
       if let element = captureStore.capturedElement {
-        Grid(alignment: .trailing, horizontalSpacing: 16, verticalSpacing: 4) {
-          GridRow {
-            Text("Identifier:")
-              .font(.system(.caption, design: .monospaced))
-              .foregroundColor(.secondary)
-            Text(element.identifier ?? "No identifier")
-              .frame(maxWidth: .infinity, alignment: .leading)
-            Text("Description:")
-              .font(.system(.caption, design: .monospaced))
-              .foregroundColor(.secondary)
-            Text(element.description ?? "No description")
-              .frame(maxWidth: .infinity, alignment: .leading)
-          }
+        let predicatesCount = predicates.count - 1
 
-          GridRow {
-            Text("Title:")
-              .font(.system(.caption, design: .monospaced))
-              .foregroundColor(.secondary)
-            Text(element.title ?? "No title")
-              .frame(maxWidth: .infinity, alignment: .leading)
-            Text("Value:")
-              .font(.system(.caption, design: .monospaced))
-              .foregroundColor(.secondary)
-            Text(element.value ?? "No value")
-              .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: 0) {
+          HStack {
+            UIElementIconView(size: 24)
+            Text("Captured Element")
           }
+          .padding(8)
+          ZenDivider(.horizontal)
+          Grid(alignment: .trailing, horizontalSpacing: 16, verticalSpacing: 4) {
+            GridRow {
+              Text("Identifier:")
+                .font(.system(.caption, design: .monospaced))
+                .foregroundColor(.secondary)
+              Button(action: {
+                if let identifier = element.identifier {
+                  predicates[predicatesCount].value = identifier
+                  predicates[predicatesCount].properties = [.identifier]
+                  validation = updateAndValidatePayload()
+                }
+              }) {
+                Text(element.identifier ?? "No identifier")
+                  .frame(maxWidth: .infinity, alignment: .leading)
+              }
 
-          GridRow {
-            Text("Role:")
-              .font(.system(.caption, design: .monospaced))
-              .foregroundColor(.secondary)
-            Text(element.role ?? "No value")
-              .frame(maxWidth: .infinity, alignment: .leading)
+              Text("Description:")
+                .font(.system(.caption, design: .monospaced))
+                .foregroundColor(.secondary)
+
+              Button(action: {
+                if let description = element.description {
+                  predicates[predicatesCount].value = description
+                  predicates[predicatesCount].properties = [.description]
+                  validation = updateAndValidatePayload()
+                }
+              }) {
+                Text(element.description ?? "No description")
+                  .frame(maxWidth: .infinity, alignment: .leading)
+              }
+            }
+
+            GridRow {
+              Text("Title:")
+                .font(.system(.caption, design: .monospaced))
+                .foregroundColor(.secondary)
+              Button(action: {
+                if let title = element.title {
+                  predicates[predicatesCount].value = title
+                  predicates[predicatesCount].properties = [.title]
+                  validation = updateAndValidatePayload()
+                }
+              }) {
+                Text(element.title ?? "No title")
+                  .frame(maxWidth: .infinity, alignment: .leading)
+              }
+              Text("Value:")
+                .font(.system(.caption, design: .monospaced))
+                .foregroundColor(.secondary)
+              Button(action: {
+                if let value = element.value {
+                  predicates[predicatesCount].value = value
+                  predicates[predicatesCount].properties = [.value]
+                  validation = updateAndValidatePayload()
+                }
+              }) {
+                Text(element.value ?? "No value")
+                  .frame(maxWidth: .infinity, alignment: .leading)
+              }
+            }
+
+            GridRow {
+              Text("Role:")
+                .font(.system(.caption, design: .monospaced))
+                .foregroundColor(.secondary)
+              Button(action: {
+                if let role = element.role {
+                  let kind = UIElementCommand.Kind(role)
+                  predicates[predicatesCount].kind = kind
+                  validation = updateAndValidatePayload()
+                }
+              }) {
+                Text(element.role ?? "No value")
+                  .frame(maxWidth: .infinity, alignment: .leading)
+              }
+              Text("Subrole:")
+                .font(.system(.caption, design: .monospaced))
+                .foregroundColor(.secondary)
+              Button(action: {
+                if let subrole = element.subrole {
+                  predicates[predicatesCount].value = subrole
+                  predicates[predicatesCount].properties = [.subrole]
+                  validation = updateAndValidatePayload()
+                }
+              }) {
+                Text(element.subrole ?? "No value")
+                  .frame(maxWidth: .infinity, alignment: .leading)
+              }
+            }
           }
         }
-        .padding(8)
-        .roundedContainer(padding: 8, margin: 2)
+        .roundedSubStyle(padding: 8)
       }
     }
-
     .onReceive(captureStore.$capturedElement, perform: { element in
       guard let element else { return }
 
@@ -201,6 +251,9 @@ struct NewCommandUIElementView: View {
       } else if let elementTitle = element.title, !elementTitle.isEmpty {
         predicate.properties = [.title]
         predicate.value = elementTitle
+      } else if let elementSubrole = element.subrole, !elementSubrole.isEmpty {
+        predicate.properties = [.subrole]
+        predicate.value = elementSubrole
       }
 
       if let role = element.role {
@@ -215,6 +268,7 @@ struct NewCommandUIElementView: View {
     .onDisappear {
       captureStore.stopCapturing()
     }
+    .enableInjection()
   }
 
   private func captureButton() -> some View {
@@ -232,18 +286,15 @@ struct NewCommandUIElementView: View {
           )
           .animation(.smooth, value: captureStore.isCapturing)
           .frame(width: 14, height: 14)
-          .padding(1)
-        Text( captureStore.isCapturing ? "Stop Capture" : "Capture UI Element")
+        Text(captureStore.isCapturing ? "Stop Capture" : "Capture UI Element")
       }
     })
-    .buttonStyle(
-      .zen(
-        .init(
-          color: .systemGreen,
-          hoverEffect: .constant(false)
-        )
-      )
-    )
+    .buttonStyle { button in
+      button.calm = false
+      button.focusEffect = true
+      button.hoverEffect = false
+      button.backgroundColor = .systemGreen
+    }
     .matchedGeometryEffect(id: "CaptureButton", in: namespace)
   }
 
@@ -259,7 +310,7 @@ struct NewCommandUIElementView: View {
 
 #if DEBUG
 #Preview("Empty") {
-  NewCommandUIElementView(.readonly(.uiElement(predicates: [])), validation: .readonly(.needsValidation))
+  NewCommandUIElementView(.readonly { .uiElement(predicates: []) }, validation: .readonly { .needsValidation })
     .padding()
     .environmentObject(
       UIElementCaptureStore(
@@ -270,12 +321,12 @@ struct NewCommandUIElementView: View {
 }
 
 #Preview("Captured UI Element") {
-  NewCommandUIElementView(.readonly(.uiElement(predicates: [])), validation: .readonly(.needsValidation))
+  NewCommandUIElementView(.readonly { .uiElement(predicates: []) }, validation: .readonly {.needsValidation })
     .padding()
     .environmentObject(
       UIElementCaptureStore(
         isCapturing: false,
-        capturedElement: .init(description: nil, identifier: nil, title: nil, value: nil, role: nil)
+        capturedElement: .init(description: nil, identifier: "foo", title: nil, value: nil, role: nil, subrole: nil)
       )
     )
 }

@@ -4,7 +4,7 @@ import SwiftUI
 
 @MainActor
 final class ContentStore: ObservableObject {
-  enum State: Equatable {
+  enum State: Equatable, Sendable {
     case loading
     case noConfiguration
     case initialized
@@ -13,8 +13,9 @@ final class ContentStore: ObservableObject {
   @Published private(set) var state: State = .loading
   @Published private(set) var preferences: AppPreferences
 
-  private let storage: Storage
-  private let keyboardShortcutsController: KeyboardShortcutsController
+  let storage: ConfigurationStorage
+
+  private let shortcutResolver: ShortcutResolver
 
   private var subscriptions = [AnyCancellable]()
 
@@ -25,12 +26,13 @@ final class ContentStore: ObservableObject {
 
   private var configurationId: String
   let applicationStore: ApplicationStore
+  let configMigrator: ConfigurationMigrator
 
   init(_ preferences: AppPreferences,
        applicationStore: ApplicationStore,
        configurationStore: ConfigurationStore,
        groupStore: GroupStore,
-       keyboardShortcutsController: KeyboardShortcutsController,
+       shortcutResolver: ShortcutResolver,
        recorderStore: KeyShortcutRecorderStore,
        shortcutStore: ShortcutStore,
        scriptCommandRunner: ScriptCommandRunner = .init(workspace: .shared),
@@ -40,12 +42,26 @@ final class ContentStore: ObservableObject {
     self.shortcutStore = shortcutStore
     self.groupStore = groupStore
     self.configurationStore = configurationStore
-    self.keyboardShortcutsController = keyboardShortcutsController
+    self.shortcutResolver = shortcutResolver
     self.preferences = preferences
-    self.storage = Storage(preferences.storageConfiguration)
+    self.storage = ConfigurationStorage(preferences.configLocation)
     self.recorderStore = recorderStore
 
-    guard KeyboardCowboy.env() != .previews else { return }
+    let legacy = AppPreferences.legacy()
+    self.configMigrator = ConfigurationMigrator(legacyUrl: legacy.configLocation.url)
+
+    guard KeyboardCowboyApp.env() != .previews else { return }
+
+    guard !launchArguments.isEnabled(.runningUnitTests) else { return }
+
+    do {
+      if try configMigrator.configurationNeedsMigration(at: legacy.configLocation.url) == true {
+        try configMigrator.performMigration(from: legacy.configLocation.url,
+                                            to: preferences.configLocation.url)
+      }
+    } catch {
+      print("Error migrating configuration: \(error))")
+    }
 
     UserSpace.shared.subscribe(to: configurationStore.$selectedConfiguration)
 
@@ -56,9 +72,11 @@ final class ContentStore: ObservableObject {
       let configurations: [KeyboardCowboyConfiguration]
 
       do {
+        storage.backupIfNeeded()
+
         configurations = try await storage.load()
         setup(configurations)
-      } catch let error as StorageError {
+      } catch let error as ConfigurationStorageError {
         switch error {
         case .unableToFindFile:
           break
@@ -93,7 +111,7 @@ final class ContentStore: ObservableObject {
 
   func use(_ configuration: KeyboardCowboyConfiguration) {
     Task {
-      keyboardShortcutsController.cache(configuration.groups)
+      shortcutResolver.cache(configuration.groups)
     }
     configurationId = configuration.id
     configurationStore.select(configuration)
@@ -111,7 +129,7 @@ final class ContentStore: ObservableObject {
     use(configurationStore.selectedConfiguration)
     storage.subscribe(to: configurationStore.$configurations)
     subscribe(to: groupStore.$groups)
-    shortcutStore.subscribe(to: UserSpace.shared.$frontMostApplication)
+    shortcutStore.subscribe(to: UserSpace.shared.$frontmostApplication)
     state = .initialized
   }
 

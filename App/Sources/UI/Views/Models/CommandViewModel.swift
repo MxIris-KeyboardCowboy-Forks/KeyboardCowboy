@@ -43,13 +43,30 @@ struct CommandViewModel: Codable, Hashable, Identifiable, Transferable {
 
   enum Kind: Codable, Hashable, Identifiable, Sendable {
     var id: String { (self as (any Identifiable<String>)).id }
+    var placeholder: String {
+      switch self {
+      case .application(let applicationModel): applicationModel.placeholder
+      case .builtIn(let builtInModel): builtInModel.placeholder
+      case .bundled(let bundledModel): bundledModel.placeholder
+      case .open(let openModel): openModel.placeholder
+      case .keyboard(let keyboardModel): keyboardModel.placeholder
+      case .script(let scriptModel): scriptModel.placeholder
+      case .shortcut(let shortcutModel): shortcutModel.placeholder
+      case .text(let textModel): textModel.placeholder
+      case .systemCommand(let systemModel): systemModel.placeholder
+      case .menuBar(let menuBarModel): menuBarModel.placeholder
+      case .mouse(let mouseModel): mouseModel.placeholder
+      case .uiElement(let uIElementCommand): uIElementCommand.placeholder
+      case .windowManagement(let windowManagementModel): windowManagementModel.placeholder
+      }
+    }
 
     case application(ApplicationModel)
     case builtIn(BuiltInModel)
+    case bundled(BundledModel)
     case open(OpenModel)
     case keyboard(KeyboardModel)
     case script(ScriptModel)
-    case plain
     case shortcut(ShortcutModel)
     case text(TextModel)
     case systemCommand(SystemModel)
@@ -60,23 +77,67 @@ struct CommandViewModel: Codable, Hashable, Identifiable, Transferable {
 
     struct ApplicationModel: Codable, Hashable, Identifiable, Sendable {
       let id: String
-      var placheolder: String { "Open/Close/Switch to Application …" }
+      var placeholder: String { "Open/Close/Switch to Application …" }
       var action: String
       var inBackground: Bool
       var hideWhenRunning: Bool
       var ifNotRunning: Bool
+      var addToStage: Bool
+      var waitForAppToLaunch: Bool
     }
 
     struct BuiltInModel: Codable, Hashable, Identifiable, Sendable {
       let id: String
       var name: String
-      var placheolder: String { "Run Built-In Action …" }
+      var placeholder: String { "Run Built-In Action …" }
       var kind: BuiltInCommand.Kind
+    }
+
+    struct BundledModel: Codable, Hashable, Identifiable, Sendable {
+      enum Kind: Codable, Hashable, Sendable {
+        case workspace(WorkspaceModel)
+        case appFocus(AppFocusModel)
+        case tidy(WindowTidyModel)
+
+        var placeholder: String {
+          switch self {
+          case .workspace: "Organize Apps into Workspace…"
+          case .appFocus: "Focus on App…"
+          case .tidy: "Tidy up Windows…"
+          }
+        }
+      }
+      let id: String
+      var name: String
+      var placeholder: String { kind.placeholder }
+      let kind: Kind
+    }
+
+    struct WorkspaceModel: Codable, Hashable, Sendable {
+      var applications: [Application]
+      var tiling: WorkspaceCommand.Tiling?
+      var hideOtherApps: Bool
+    }
+
+    struct AppFocusModel: Codable, Hashable, Sendable {
+      var application: Application?
+      var tiling: WorkspaceCommand.Tiling?
+      var hideOtherApps: Bool
+      var createNewWindow: Bool
+    }
+
+    struct WindowTidyModel: Codable, Hashable, Sendable {
+      var rules: [Rule]
+
+      struct Rule: Codable, Hashable, Sendable {
+        let application: Application
+        var tiling: WindowTiling
+      }
     }
 
     struct OpenModel: Codable, Hashable, Identifiable, Sendable {
       let id: String
-      var placheolder: String { "Open …" }
+      var placeholder: String { "Open …" }
       var path: String
       var applicationPath: String?
       var appName: String?
@@ -86,6 +147,7 @@ struct CommandViewModel: Codable, Hashable, Identifiable, Transferable {
     struct KeyboardModel: Codable, Hashable, Identifiable, Sendable {
       let id: String
       var placeholder: String { "Invoke Keyboard Shortcut …" }
+      var iterations: Int
       var keys: [KeyShortcut]
     }
 
@@ -134,6 +196,7 @@ struct CommandViewModel: Codable, Hashable, Identifiable, Transferable {
       var mode: TextCommand.TypeCommand.Mode
       var placeholder: String { "Type input …" }
       var input: String
+      var actions: Set<TextCommand.TypeCommand.Action>
     }
 
     struct TextModel: Codable, Hashable, Identifiable, Sendable {

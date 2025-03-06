@@ -17,7 +17,6 @@ struct UIElementIconView: View {
     .compositingGroup()
     .frame(width: size, height: size)
     .fixedSize()
-    .drawingGroup(opaque: true)
     .iconShape(size)
   }
 }
@@ -107,17 +106,6 @@ private struct UIElementIconViewFinderView: View {
 }
 
 #Preview {
-  HStack(alignment: .top, spacing: 8) {
-    UIElementIconView(size: 192)
-    VStack(alignment: .leading, spacing: 8) {
-      UIElementIconView(size: 128)
-      HStack(alignment: .top, spacing: 8) {
-        UIElementIconView(size: 64)
-        UIElementIconView(size: 32)
-        UIElementIconView(size: 16)
-      }
-    }
-  }
-  .padding()
+  IconPreview { UIElementIconView(size: $0) }
 }
 

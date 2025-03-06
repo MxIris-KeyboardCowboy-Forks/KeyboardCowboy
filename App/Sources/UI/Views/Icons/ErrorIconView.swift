@@ -6,10 +6,11 @@ struct ErrorIconView: View {
     Rectangle()
       .fill(
         LinearGradient(stops: [
-          .init(color: Color(.systemGray.blended(withFraction: 0.25, of: .black)!), location: 0.0),
-          .init(color: Color(.systemGray.blended(withFraction: 0.5, of: .black)!), location: 1.0),
+          .init(color: Color(.systemRed.blended(withFraction: 0.25, of: .white)!), location: 0.0),
+          .init(color: Color(.systemRed.blended(withFraction: 0.25, of: .black)!), location: 1.0),
         ], startPoint: .top, endPoint: .bottom)
       )
+      .grayscale(0.5)
       .overlay { iconOverlay().opacity(0.65) }
       .overlay { iconBorder(size) }
       .overlay {
@@ -34,16 +35,5 @@ struct ErrorIconView: View {
 }
 
 #Preview {
-  HStack(alignment: .top, spacing: 8) {
-    ErrorIconView(size: 192)
-    VStack(alignment: .leading, spacing: 8) {
-      ErrorIconView(size: 128)
-      HStack(alignment: .top, spacing: 8) {
-        ErrorIconView(size: 64)
-        ErrorIconView(size: 32)
-        ErrorIconView(size: 16)
-      }
-    }
-  }
-  .padding()
+  IconPreview { ErrorIconView(size: $0) }
 }

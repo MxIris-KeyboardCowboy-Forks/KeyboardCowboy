@@ -15,7 +15,7 @@ struct KeyboardShortcutView: View {
     .padding(1)
     .padding(.horizontal, 4)
     .background(
-      KeyBackgroundView(isPressed: .readonly(false), height: 12)
+      KeyBackgroundView(isPressed: .readonly { false }, height: 12)
     )
     .overlay(
       RoundedRectangle(cornerRadius: 4)
@@ -27,7 +27,7 @@ struct KeyboardShortcutView: View {
 struct ShortcutView_Previews: PreviewProvider {
   static var previews: some View {
     KeyboardShortcutView(shortcut:
-        .init(key: "C", lhs: true, modifiers: [.command])
+        .init(key: "C", modifiers: [.leftCommand])
     )
   }
 }
