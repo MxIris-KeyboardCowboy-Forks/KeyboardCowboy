@@ -79,10 +79,12 @@ final class OpenURLSwapTabsPlugin {
             end tell
             """
 
-        let scriptCommand = ScriptCommand(name: UUID().uuidString, kind: .appleScript, source: .inline(source), notification: nil)
+        let scriptCommand = ScriptCommand(name: UUID().uuidString, kind: .appleScript(variant: .regular),
+                                          source: .inline(source), notification: nil)
 
         // Run the script command and check the result
-        if try await commandRunner.run(scriptCommand, environment: [:], checkCancellation: checkCancellation) == "-1" {
+        if try await commandRunner.run(scriptCommand, snapshot: UserSpace.shared.snapshot(resolveUserEnvironment: false),
+                                       runtimeDictionary: [:], checkCancellation: checkCancellation) == "-1" {
           throw OpenURLSwapToPluginError.couldNotFindOpenUrl
         }
       }

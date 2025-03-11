@@ -29,31 +29,7 @@ struct WindowManagementCommandView: View {
       },
       subContent: {
         HStack {
-          Menu {
-            Button(action: {
-              updater.modifyCommand(withID: metaData.id, using: transaction) { command in
-                command.notification = .none
-              }
-            }, label: { Text("None") })
-            ForEach(Command.Notification.regularCases) { notification in
-              Button(action: {
-                updater.modifyCommand(withID: metaData.id, using: transaction) { command in
-                  command.notification = notification
-                }
-              }, label: { Text(notification.displayValue) })
-            }
-          } label: {
-            switch metaData.notification {
-            case .bezel:        Text("Bezel").font(.caption)
-            case .capsule:      Text("Capsule").font(.caption)
-            case .commandPanel: Text("Command Panel").font(.caption)
-            case .none:         Text("None").font(.caption)
-            }
-          }
-          .fixedSize()
-
           Spacer()
-
           WindowManagementAnimationDurationView(windowCommand: $model) { newDuration in
             model.animationDuration = newDuration
             updater.modifyCommand(withID: metaData.id, using: transaction) { command in
@@ -116,7 +92,7 @@ struct WindowManagementCommandInternalView: View {
       HStack {
         illustrationIcon()
         Menu(content: {
-          ForEach(WindowCommand.Kind.allCases) { kind in
+          ForEach(WindowManagementCommand.Kind.allCases) { kind in
             Button(action: {
               model.kind = kind
               performUpdate(kind)
@@ -137,7 +113,7 @@ struct WindowManagementCommandInternalView: View {
       case .increaseSize, .decreaseSize,
            .move, .anchor:
         HStack(spacing: 16) {
-          let models = WindowCommand.Direction.allCases
+          let models = WindowManagementCommand.Direction.allCases
           LazyVGrid(columns: (0..<3).map {
             _ in GridItem(.fixed(24), spacing: 1)
           },
@@ -153,7 +129,7 @@ struct WindowManagementCommandInternalView: View {
                   .foregroundColor(.white)
               }
               Button {
-                let kind: WindowCommand.Kind
+                let kind: WindowManagementCommand.Kind
                 switch model.kind {
                 case .increaseSize(let value, _, let padding, let constrainedToScreen):
                   kind = .increaseSize(by: value, direction: element, padding: padding, constrainedToScreen: constrainedToScreen)
@@ -187,7 +163,7 @@ struct WindowManagementCommandInternalView: View {
               GridRow {
                 NumberTextField(text: $pixels, onValidChange: { newValue in
                   guard let pixels = Int(newValue) else { return }
-                  let kind: WindowCommand.Kind
+                  let kind: WindowManagementCommand.Kind
                   switch model.kind {
                   case .increaseSize(_, let direction, let padding, let constrainedToScreen):
                     kind = .increaseSize(
@@ -227,7 +203,7 @@ struct WindowManagementCommandInternalView: View {
               NumberTextField(text: $padding,
                               onValidChange: { newValue in
                 guard let padding = Int(newValue) else { return }
-                let kind: WindowCommand.Kind
+                let kind: WindowManagementCommand.Kind
                 switch model.kind {
                 case .increaseSize(let pixels, let direction, _, let constrainedToScreen):
                   kind = .increaseSize(
@@ -269,7 +245,7 @@ struct WindowManagementCommandInternalView: View {
 
                 Toggle(isOn: $constrainToScreen, label: {})
                   .onChange(of: constrainToScreen) { constrainedToScreen in
-                    let kind: WindowCommand.Kind
+                    let kind: WindowManagementCommand.Kind
                     switch model.kind {
                     case .increaseSize(let pixels, let direction, let padding, _):
                       kind = .increaseSize(
@@ -309,7 +285,7 @@ struct WindowManagementCommandInternalView: View {
         HStack(spacing: 12) {
           NumberTextField(text: $padding, onValidChange: { newValue in
             guard let newPadding = Int(newValue) else { return }
-            let kind: WindowCommand.Kind
+            let kind: WindowManagementCommand.Kind
             switch model.kind {
             case .fullscreen:
               kind = .fullscreen(padding: newPadding)
@@ -329,7 +305,7 @@ struct WindowManagementCommandInternalView: View {
 
   }
 
-  private func performUpdate(_ newKind: WindowCommand.Kind) {
+  private func performUpdate(_ newKind: WindowManagementCommand.Kind) {
     updater.modifyCommand(withID: metaData.id, using: transaction) { command in
       guard case .windowManagement(var windowCommand) = command else { return }
       windowCommand.kind = newKind
@@ -337,7 +313,7 @@ struct WindowManagementCommandInternalView: View {
     }
   }
 
-  private func resolveAlignment(_ kind: WindowCommand.Kind) -> Alignment {
+  private func resolveAlignment(_ kind: WindowManagementCommand.Kind) -> Alignment {
     switch kind {
     case .increaseSize(_, let direction, _, _),
         .decreaseSize(_, let direction, _),
@@ -439,9 +415,11 @@ struct WindowManagementCommandInternalView: View {
 }
 
 struct WindowManagementCommandView_Previews: PreviewProvider {
-
-  static var models: [(model: CommandViewModel, kind: WindowCommand.Kind)] = WindowCommand.Kind.allCases
-    .map(DesignTime.windowCommand)
+  @MainActor
+  static var models: [(model: CommandViewModel, kind: WindowManagementCommand.Kind)] = WindowManagementCommand.Kind.allCases
+    .map { kind in
+      DesignTime.windowCommand(kind)
+    }
 
   static var previews: some View {
     ScrollView {

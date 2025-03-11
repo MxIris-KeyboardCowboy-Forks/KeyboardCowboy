@@ -8,7 +8,7 @@ import SwiftUI
 
 protocol CommandRunning {
   func serialRun(_ commands: [Command], checkCancellation: Bool, resolveUserEnvironment: Bool,
-                 machPortEvent: MachPortEvent, repeatingEvent: Bool)
+                 machPortEvent: MachPortEvent, repeatingEvent: Bool) -> Task<Void, any Error>
   func concurrentRun(_ commands: [Command], checkCancellation: Bool, resolveUserEnvironment: Bool,
                      machPortEvent: MachPortEvent, repeatingEvent: Bool)
 }
@@ -18,6 +18,7 @@ final class CommandRunner: CommandRunning, @unchecked Sendable {
     let application: ApplicationCommandRunner
     let builtIn: BuiltInCommandRunner
     let bundled: BundledCommandRunner
+    let inputSource: InputSourceCommandRunner
     let keyboard: KeyboardCommandRunner
     let menubar: MenuBarCommandRunner
     let mouse: MouseCommandRunner
@@ -27,7 +28,9 @@ final class CommandRunner: CommandRunning, @unchecked Sendable {
     let system: SystemCommandRunner
     let text: TextCommandRunner
     let uiElement: UIElementCommandRunner
-    let window: WindowCommandRunner
+    let windowFocus: WindowCommandFocusRunner
+    let windowManagement: WindowManagementCommandRunner
+    let windowTiling: WindowTilingCommandRunner
 
     func setMachPort(_ machPort: MachPortEventController?) {
       keyboard.machPort = machPort
@@ -67,6 +70,12 @@ final class CommandRunner: CommandRunning, @unchecked Sendable {
     self.applicationStore = applicationStore
     self.missionControl = MissionControlPlugin(keyboard: keyboardCommandRunner)
     self.commandPanel = CommandPanelCoordinator()
+
+    let windowCenter = WindowFocusCenter()
+    let relativeFocus = WindowFocusRelativeFocus()
+    let quarterFocus = WindowFocusQuarter()
+    let windowFocus =  WindowCommandFocusRunner(centerFocus: windowCenter, relativeFocus: relativeFocus, quarterFocus: quarterFocus)
+
     self.runners = .init(
       application: ApplicationCommandRunner(
         scriptCommandRunner: scriptCommandRunner,
@@ -74,7 +83,10 @@ final class CommandRunner: CommandRunning, @unchecked Sendable {
         workspace: workspace
       ),
       builtIn: builtInCommandRunner,
-      bundled: BundledCommandRunner(applicationStore: applicationStore, systemRunner: systemCommandRunner, windowTidy: windowTidy),
+      bundled: BundledCommandRunner(applicationStore: applicationStore,
+                                    windowFocusRunner: windowFocus,
+                                    windowTidy: windowTidy),
+      inputSource: InputSourceCommandRunner(),
       keyboard: keyboardCommandRunner,
       menubar: MenuBarCommandRunner(),
       mouse: MouseCommandRunner(),
@@ -84,7 +96,9 @@ final class CommandRunner: CommandRunning, @unchecked Sendable {
       system: systemCommandRunner,
       text: TextCommandRunner(keyboardCommandRunner),
       uiElement: uiElementCommandRunner,
-      window: WindowCommandRunner()
+      windowFocus: windowFocus,
+      windowManagement: WindowManagementCommandRunner(),
+      windowTiling: WindowTilingCommandRunner(centerFocus: windowCenter, relativeFocus: relativeFocus, quarterFocus: quarterFocus)
     )
     self.workspace = workspace
 
@@ -113,19 +127,21 @@ final class CommandRunner: CommandRunning, @unchecked Sendable {
           let shellScript = ScriptCommand(name: "Reveal \(shortcut.shortcutIdentifier)",
                                           kind: .shellScript, source: .inline(source), notification: nil)
 
-          _ = try await runners.script.run(shellScript, environment: [:], checkCancellation: false)
+          _ = try await runners.script.run(shellScript, snapshot: UserSpace.shared.snapshot(resolveUserEnvironment: false),
+                                           runtimeDictionary: [:], checkCancellation: false)
         }
       case .builtIn, .keyboard, .text,
           .systemCommand, .menuBar, .windowManagement, 
-          .mouse, .uiElement, .bundled:
+          .mouse, .uiElement, .bundled, .windowFocus, .windowTiling:
         break
       }
     }
   }
 
+  @discardableResult
   func serialRun(_ commands: [Command], checkCancellation: Bool,
                  resolveUserEnvironment: Bool, machPortEvent: MachPortEvent,
-                 repeatingEvent: Bool) {
+                 repeatingEvent: Bool) -> Task<Void, any Error> {
     let originalPasteboardContents: String? = commands.shouldRestorePasteboard
     ? NSPasteboard.general.string(forType: .string)
     : nil
@@ -135,7 +151,7 @@ final class CommandRunner: CommandRunning, @unchecked Sendable {
       serialTask?.cancel()
     }
 
-    serialTask = Task.detached(priority: .userInitiated) { [weak self] in
+    let serialTask = Task.detached(priority: .userInitiated) { [weak self] in
       Benchmark.shared.start("CommandRunner.serialRun")
       guard let self else { return }
       do {
@@ -157,6 +173,24 @@ final class CommandRunner: CommandRunning, @unchecked Sendable {
                                machPortEvent: machPortEvent,
                                checkCancellation: checkCancellation,
                                repeatingEvent: repeatingEvent, runtimeDictionary: &runtimeDictionary)
+          } catch let scriptError as ShellScriptPlugin.ShellScriptPluginError {
+            await MainActor.run {
+              let alert = NSAlert()
+              switch scriptError {
+              case .noData:
+                alert.messageText = "No Data"
+              case .scriptError(let string):
+                alert.messageText = string
+              }
+
+              KeyboardCowboyApp.activate()
+
+              CapsuleNotificationWindow.shared.publish(scriptError.localizedDescription, state: .failure)
+
+              alert.runModal()
+            }
+
+            throw scriptError
           } catch {
             switch command.notification {
             case .bezel:
@@ -183,6 +217,10 @@ final class CommandRunner: CommandRunning, @unchecked Sendable {
       }
       Benchmark.shared.stop("CommandRunner.serialRun")
     }
+
+    self.serialTask = serialTask
+
+    return serialTask
   }
 
   func concurrentRun(_ commands: [Command], checkCancellation: Bool,
@@ -297,15 +335,21 @@ final class CommandRunner: CommandRunning, @unchecked Sendable {
         repeatingEvent: repeatingEvent,
         runtimeDictionary: &runtimeDictionary
       )
-    case .keyboard(let keyboardCommand):
-      try await runners.keyboard.run(
-        keyboardCommand.keyboardShortcuts,
-        originalEvent: nil,
-        iterations: keyboardCommand.iterations,
-        with: eventSource
-      )
-      try await Task.sleep(for: .milliseconds(1))
-      output = command.name
+    case .keyboard(let command):
+      switch command.kind {
+      case .key(let keyboardCommand):
+        try await runners.keyboard.run(
+          keyboardCommand.keyboardShortcuts,
+          originalEvent: nil,
+          iterations: keyboardCommand.iterations,
+          with: eventSource
+        )
+        try await Task.sleep(for: .milliseconds(1))
+        output = command.name
+      case .inputSource(let command):
+        try await runners.inputSource.run(command)
+        output = command.name
+      }
     case .menuBar(let menuBarCommand):
       try await runners.menubar.execute(menuBarCommand, repeatingEvent: repeatingEvent)
       output = command.name
@@ -323,7 +367,8 @@ final class CommandRunner: CommandRunning, @unchecked Sendable {
     case .script(let scriptCommand):
       let result = try await self.runners.script.run(
         scriptCommand,
-        environment: snapshot.terminalEnvironment(),
+        snapshot: snapshot,
+        runtimeDictionary: runtimeDictionary,
         checkCancellation: checkCancellation
       )
 
@@ -365,15 +410,21 @@ final class CommandRunner: CommandRunning, @unchecked Sendable {
     case .uiElement(let uiElementCommand):
       try await runners.uiElement.run(uiElementCommand, checkCancellation: checkCancellation)
       output = ""
+    case .windowFocus(let command):
+      try await runners.windowFocus.run(command, snapshot: snapshot)
+      output = ""
+    case .windowTiling(let command):
+      output = ""
+      try await runners.windowTiling.run(command, snapshot: snapshot)
     case .windowManagement(let windowCommand):
-      try await runners.window.run(windowCommand)
+      try await runners.windowManagement.run(windowCommand)
 
       if case .moveToNextDisplay(let mode) = windowCommand.kind,
          case .center = mode {
         let snapshot = await UserSpace.shared.snapshot(resolveUserEnvironment: false, refreshWindows: true)
-        Task.detached {
+        Task.detached { [windowTiling=runners.windowTiling] in
           try await Task.sleep(for: .milliseconds(200))
-          try await SystemWindowTilingRunner.run(.center, snapshot: snapshot)
+          try await windowTiling.run(.init(kind: .center, meta: .init()), snapshot: snapshot)
         }
       }
 
@@ -409,8 +460,8 @@ final class CommandRunner: CommandRunning, @unchecked Sendable {
     UserSpace.shared.subscribe(to: coordinator.$lastEventOrRebinding)
     WindowStore.shared.subscribe(to: coordinator.$flagsChanged)
     subscribe(to: coordinator.$event)
-    runners.system.subscribe(to: coordinator.$flagsChanged)
-    runners.window.subscribe(to: coordinator.$event)
+    runners.windowFocus.subscribe(to: coordinator.$flagsChanged)
+    runners.windowManagement.subscribe(to: coordinator.$event)
   }
 
   // MARK: Private methods

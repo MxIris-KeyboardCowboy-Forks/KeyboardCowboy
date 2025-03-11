@@ -23,12 +23,13 @@ final class OpenFolderInFinder {
       end tell
       """
     let script = ScriptCommand(name: "Open folder in Finder: \(path)",
-                               kind: .appleScript,
+                               kind: .appleScript(variant: .regular),
                                source: .inline(source),
                                notification: nil)
 
     if checkCancellation { try Task.checkCancellation() }
     
-    _ = try await commandRunner.run(script, environment: [:], checkCancellation: checkCancellation)
+    _ = try await commandRunner.run(script, snapshot: UserSpace.shared.snapshot(resolveUserEnvironment: true),
+                                    runtimeDictionary: [:], checkCancellation: checkCancellation)
   }
 }

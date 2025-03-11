@@ -32,17 +32,18 @@ struct CommandListHeader: View {
         }, label: {
           Text(publisher.data.execution.rawValue)
         })
-        .fixedSize(horizontal: true, vertical: true)
-        CommandListHeaderAddButton(namespace)
-      }
-      .buttonStyle { button in
-        button.padding = .medium
-        button.font = .body
-        button.backgroundColor = .systemGreen
-      }
-      .menuStyle { menu in
-        menu.padding = .medium
-        menu.font = .body
+        .fixedSize()
+
+        NewCommandMenu {
+          Text("New Command")
+        }
+        .fixedSize()
+        .help("Add Command")
+        .menuStyle { menu in
+          menu.padding = .medium
+          menu.backgroundColor = .systemGreen
+          menu.hoverEffect = publisher.data.commands.isEmpty ? false : true
+        }
       }
     }
   }

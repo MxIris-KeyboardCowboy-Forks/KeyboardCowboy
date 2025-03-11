@@ -47,53 +47,31 @@ struct KeyboardCommandInternalView: View {
       placeholder: model.placeholder,
       icon: { KeyboardCommandIconView(iconSize: iconSize) },
       content: {
-        KeyboardCommandContentView(model: $model, focus: focus) {
+        ContentView(model: $model, focus: focus) {
           openWindow.openNewCommandWindow(.editCommand(workflowId: transaction.workflowID, commandId: metaData.id))
         }
       },
       subContent: {
-        Menu {
-          Button(action: {
-            updater.modifyCommand(withID: metaData.id, using: transaction) { command in
-              command.notification = .none
-            }
-          }, label: { Text("None") })
-          ForEach(Command.Notification.regularCases) { notification in
-            Button(action: {
-              updater.modifyCommand(withID: metaData.id, using: transaction) { command in
-                command.notification = notification
-              }
-            }, label: { Text(notification.displayValue) })
-          }
-        } label: {
-          switch metaData.notification {
-          case .bezel:        Text("Bezel").font(.caption)
-          case .capsule:      Text("Capsule").font(.caption)
-          case .commandPanel: Text("Command Panel").font(.caption)
-          case .none:         Text("None").font(.caption)
-          }
-        }
-        .fixedSize()
-
         Spacer()
-
         Menu {
           ForEach(1..<20, id: \.self) { iteration in
             Button {
               updater.modifyCommand(withID: metaData.id, using: transaction) { command in
-                guard case .keyboard(var keyboardCommand) = command else { return }
+                guard case .keyboard(let keyboardCommand) = command,
+                      case .key(var keyboardCommand) = keyboardCommand.kind else { return }
                 keyboardCommand.iterations = iteration
-                command = .keyboard(keyboardCommand)
+                command = .keyboard(.init(id: command.id, name: command.name, kind: .key(command: keyboardCommand),
+                                          notification: command.notification, meta: command.meta))
               }
             } label: {
-                Text("\(iteration)")
-                .underline(model.iterations == iteration)
+              Text("\(iteration)")
+                .underline(model.command.iterations == iteration)
             }
           }
           .font(.caption)
         } label: {
           Image(systemName: "repeat")
-          Text("Iterations \(model.iterations)")
+          Text("Iterations \(model.command.iterations)")
             .font(.caption)
         }
         .fixedSize()
@@ -119,7 +97,7 @@ private struct KeyboardCommandIconView: View {
   }
 }
 
-private struct KeyboardCommandContentView: View {
+private struct ContentView: View {
   @StateObject private var keyboardSelection = SelectionManager<KeyShortcut>()
   @Binding private var model: CommandViewModel.Kind.KeyboardModel
   private let focus: FocusState<AppFocus?>.Binding
@@ -138,11 +116,12 @@ private struct KeyboardCommandContentView: View {
       focus,
       focusBinding: { .detail(.commandShortcut($0)) },
       mode: .externalEdit(onEdit),
-      keyboardShortcuts: $model.keys,
+      keyboardShortcuts: $model.command.keyboardShortcuts,
       draggableEnabled: false,
       selectionManager: keyboardSelection,
       onTab: { _ in })
     .font(.caption)
+    .scrollDisabled(true)
   }
 }
 

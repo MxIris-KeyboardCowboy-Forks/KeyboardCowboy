@@ -9,6 +9,8 @@ enum SystemIconBuilder {
     case .minimizeAllOpenWindows:            MinimizeAllIconView(size: size)
     case .hideAllApps:                       HideAllIconView(size: size)
     case .missionControl:                    MissionControlIconView(size: size)
+    case .showDesktop:                       DockIconView(size: size)
+
     case .moveFocusToNextWindow:             MoveFocusToWindowIconView(direction: .next, scope: .visibleWindows, size: size)
     case .moveFocusToNextWindowFront:        MoveFocusToWindowIconView(direction: .next, scope: .activeApplication, size: size)
     case .moveFocusToNextWindowGlobal:       MoveFocusToWindowIconView(direction: .next, scope: .allWindows, size: size)
@@ -16,12 +18,10 @@ enum SystemIconBuilder {
     case .moveFocusToPreviousWindowFront:    MoveFocusToWindowIconView(direction: .previous, scope: .activeApplication, size: size)
     case .moveFocusToPreviousWindowGlobal:   MoveFocusToWindowIconView(direction: .previous, scope: .allWindows, size: size)
     case .moveFocusToNextWindowCenter:       RelativeFocusIconView(.center, size: size)
-    case .showDesktop:                       DockIconView(size: size)
     case .moveFocusToNextWindowUpwards:      RelativeFocusIconView(.up, size: size)
     case .moveFocusToNextWindowDownwards:    RelativeFocusIconView(.down, size: size)
     case .moveFocusToNextWindowOnLeft:       RelativeFocusIconView(.left, size: size)
     case .moveFocusToNextWindowOnRight:      RelativeFocusIconView(.right, size: size)
-
     case .moveFocusToNextWindowUpperLeftQuarter:      RelativeFocusIconView(.up, size: size)
     case .moveFocusToNextWindowLowerLeftQuarter:    RelativeFocusIconView(.down, size: size)
     case .moveFocusToNextWindowUpperRightQuarter:       RelativeFocusIconView(.left, size: size)

@@ -201,13 +201,18 @@ final class UserSpace: @unchecked Sendable {
 
   final class UserModesPublisher: ObservableObject {
     @Published private(set) var activeModes: [UserMode] = []
+    @Published private(set) var userModes: [UserMode] = []
 
     init(_ activeModes: [UserMode]) {
       self.activeModes = activeModes
     }
 
-    func publish(_ newModes: [UserMode]) {
+    func publishActiveModes(_ newModes: [UserMode]) {
       self.activeModes = newModes
+    }
+
+    func publishUserModes(_ newModes: [UserMode]) {
+      self.userModes = newModes
     }
   }
 
@@ -217,8 +222,9 @@ final class UserSpace: @unchecked Sendable {
   @Published private(set) var frontmostApplication: Application
   @Published private(set) var previousApplication: Application
   @Published private(set) var runningApplications: [Application]
+
   public let userModesPublisher = UserModesPublisher([])
-  private(set) var userModes: [UserMode] = []
+  private(set) var currentUserModes: [UserMode] = []
 
   @MainActor fileprivate let keyCodes: KeycodeLocating
   fileprivate var cgEvent: CGEvent?
@@ -307,7 +313,7 @@ final class UserSpace: @unchecked Sendable {
 
     return Snapshot(documentPath: documentPath,
                     frontmostApplication: frontmostApplication,
-                    modes: userModes,
+                    modes: currentUserModes,
                     previousApplication: previousApplication,
                     selectedText: selectedText,
                     selections: selections,
@@ -319,17 +325,19 @@ final class UserSpace: @unchecked Sendable {
       .sink { [weak self] configuration in
         guard let self = self else { return }
         Task { @MainActor in
-          let currentModes = configuration.userModes
-            .map { UserMode(id: $0.id, name: $0.name, isEnabled: false) }
+          let newModes = configuration.userModes
             .sorted(by: { $0.name < $1.name })
-          self.userModes = currentModes
+          let currentModes = newModes
+            .map { UserMode(id: $0.id, name: $0.name, isEnabled: false) }
+          self.userModesPublisher.publishUserModes(newModes)
+          self.currentUserModes = currentModes
         }
       }
   }
 
   @MainActor
   func setUserModes(_ userModes: [UserMode]) {
-    self.userModes = userModes
+    self.currentUserModes = userModes
 
     let active = userModes.filter(\.isEnabled)
 
@@ -340,7 +348,7 @@ final class UserSpace: @unchecked Sendable {
 
   private func frontmostRunningApplication() throws -> NSRunningApplication {
     guard let frontmostApplication = NSWorkspace.shared.frontmostApplication else {
-      throw WindowCommandRunnerError.unableToResolveFrontmostApplication
+      throw WindowManagementCommandError.unableToResolveFrontmostApplication
     }
 
     return frontmostApplication

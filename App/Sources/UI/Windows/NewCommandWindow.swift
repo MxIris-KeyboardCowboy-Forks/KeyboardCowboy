@@ -155,7 +155,12 @@ final class NewCommandWindow: NSObject, NSWindowDelegate {
     case .mouse(let command):
       return .mouse(kind: command.kind)
     case .keyboard(let command):
-      return .keyboardShortcut(command.keyboardShortcuts)
+      switch command.kind {
+      case .key(let command):
+        return .keyboardShortcut(command.keyboardShortcuts)
+      case .inputSource(let command):
+        return .inputSource(id: command.id, name: command.name)
+      }
     case .open(let openCommand):
       return .open(path: openCommand.path, application: openCommand.application)
     case .shortcut(let shortcutCommand):
@@ -191,11 +196,58 @@ final class NewCommandWindow: NSObject, NSWindowDelegate {
         return .text(.init(.insertText(typeCommand)))
       }
     case .systemCommand(let systemCommand):
-      return .systemCommand(kind: systemCommand.kind)
+      return switch systemCommand.kind {
+      case .activateLastApplication: .systemCommand(kind: .activateLastApplication)
+      case .applicationWindows: .systemCommand(kind: .applicationWindows)
+      case .minimizeAllOpenWindows: .systemCommand(kind: .minimizeAllOpenWindows)
+      case .hideAllApps: .systemCommand(kind: .hideAllApps)
+      case .missionControl: .systemCommand(kind: .missionControl)
+      case .moveFocusToNextWindowOnLeft: .windowFocus(kind: .moveFocusToNextWindowOnLeft)
+      case .moveFocusToNextWindowOnRight: .windowFocus(kind: .moveFocusToNextWindowOnRight)
+      case .moveFocusToNextWindowUpwards: .windowFocus(kind: .moveFocusToNextWindowUpwards)
+      case .moveFocusToNextWindowDownwards: .windowFocus(kind: .moveFocusToNextWindowDownwards)
+      case .moveFocusToNextWindowUpperLeftQuarter:  .windowFocus(kind: .moveFocusToNextWindowUpperLeftQuarter)
+      case .moveFocusToNextWindowUpperRightQuarter: .windowFocus(kind: .moveFocusToNextWindowUpperRightQuarter)
+      case .moveFocusToNextWindowLowerLeftQuarter:  .windowFocus(kind: .moveFocusToNextWindowLowerLeftQuarter)
+      case .moveFocusToNextWindowLowerRightQuarter: .windowFocus(kind: .moveFocusToNextWindowLowerRightQuarter)
+      case .moveFocusToNextWindowCenter: .windowFocus(kind: .moveFocusToNextWindowCenter)
+      case .moveFocusToNextWindowFront: .windowFocus(kind: .moveFocusToNextWindowFront)
+      case .moveFocusToPreviousWindowFront: .windowFocus(kind: .moveFocusToPreviousWindowFront)
+      case .moveFocusToNextWindow: .windowFocus(kind: .moveFocusToNextWindow)
+      case .moveFocusToPreviousWindow: .windowFocus(kind: .moveFocusToPreviousWindow)
+      case .moveFocusToNextWindowGlobal: .windowFocus(kind: .moveFocusToNextWindowGlobal)
+      case .moveFocusToPreviousWindowGlobal: .windowFocus(kind: .moveFocusToPreviousWindowGlobal)
+      case .showDesktop: .systemCommand(kind: .showDesktop)
+
+      case .windowTilingLeft: .windowTiling(kind: .left)
+      case .windowTilingRight: .windowTiling(kind: .right)
+
+      case .windowTilingTop: .windowTiling(kind: .top)
+      case .windowTilingBottom: .windowTiling(kind: .bottom)
+      case .windowTilingTopLeft: .windowTiling(kind: .topLeft)
+      case .windowTilingTopRight: .windowTiling(kind: .topRight)
+      case .windowTilingBottomLeft: .windowTiling(kind: .bottomLeft)
+      case .windowTilingBottomRight: .windowTiling(kind: .bottomRight)
+      case .windowTilingCenter: .windowTiling(kind: .center)
+      case .windowTilingFill: .windowTiling(kind: .fill)
+      case .windowTilingZoom: .windowTiling(kind: .zoom)
+      case .windowTilingArrangeLeftRight: .windowTiling(kind: .arrangeLeftRight)
+      case .windowTilingArrangeRightLeft: .windowTiling(kind: .arrangeRightLeft)
+      case .windowTilingArrangeTopBottom: .windowTiling(kind: .arrangeTopBottom)
+      case .windowTilingArrangeBottomTop: .windowTiling(kind: .arrangeBottomTop)
+      case .windowTilingArrangeLeftQuarters: .windowTiling(kind: .arrangeLeftQuarters)
+      case .windowTilingArrangeRightQuarters: .windowTiling(kind: .arrangeRightQuarters)
+      case .windowTilingArrangeTopQuarters: .windowTiling(kind: .arrangeTopQuarters)
+      case .windowTilingArrangeBottomQuarters: .windowTiling(kind: .arrangeBottomQuarters)
+      case .windowTilingArrangeDynamicQuarters: .windowTiling(kind: .arrangeDynamicQuarters)
+      case .windowTilingArrangeQuarters: .windowTiling(kind: .arrangeQuarters)
+      case .windowTilingPreviousSize: .windowTiling(kind: .previousSize)
+      }
     case .uiElement(let model):
       return .uiElement(predicates: model.predicates)
-    case .windowManagement(let windowCommand):
-      return .windowManagement(kind: windowCommand.kind)
+    case .windowFocus(let command): return .windowFocus(kind: command.kind)
+    case .windowManagement(let command): return .windowManagement(kind: command.kind)
+    case .windowTiling(let command): return .windowTiling(kind: command.kind)
     }
   }
 
@@ -214,6 +266,8 @@ final class NewCommandWindow: NSObject, NSWindowDelegate {
     case .systemCommand: .system
     case .uiElement: .uiElement
     case .windowManagement: .windowManagement
+    default: .windowManagement
     }
   }
+#warning("Should we implement this?")
 }

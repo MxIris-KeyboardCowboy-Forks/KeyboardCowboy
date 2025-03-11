@@ -18,18 +18,21 @@ struct GroupDetailView: View {
       case application = "app"
       case builtIn = "builtIn"
       case bundled = "bundled"
-      case open = "open"
+      case inputSource = "inputSource"
       case keyboard = "keyboard"
-      case script = "script"
-      case plain = "plain"
-      case snippet = "snippet"
-      case shortcut = "shortcut"
-      case text = "text"
-      case systemCommand = "system" 
       case menuBar = "menubar"
       case mouse = "mouse"
+      case open = "open"
+      case plain = "plain"
+      case script = "script"
+      case shortcut = "shortcut"
+      case snippet = "snippet"
+      case systemCommand = "system" 
+      case text = "text"
       case uiElement = "ui"
+      case windowFocus = "windowFocus"
       case windowManagement = "window"
+      case windowTiling = "windowTiling"
     }
   }
 
@@ -55,15 +58,18 @@ struct GroupDetailView: View {
 
   private let appFocus: FocusState<AppFocus?>.Binding
   private let workflowSelection: SelectionManager<GroupDetailViewModel>
+  private let commandSelection: SelectionManager<CommandViewModel>
   private let groupId: String
   private let debounce: DebounceController<ContentDebounce>
   private let onAction: (Action) -> Void
 
   init(_ appFocus: FocusState<AppFocus?>.Binding, groupId: String,
        workflowSelection: SelectionManager<GroupDetailViewModel>,
+       commandSelection: SelectionManager<CommandViewModel>,
        onAction: @escaping (Action) -> Void) {
     self.appFocus = appFocus
     self.workflowSelection = workflowSelection
+    self.commandSelection = commandSelection
     self.groupId = groupId
     self.onAction = onAction
     let initialDebounce = ContentDebounce(workflows: workflowSelection.selections)
@@ -346,6 +352,7 @@ struct GroupDetailView: View {
 
   private func onTap(_ element: GroupDetailViewModel) {
     workflowSelection.handleOnTap(publisher.data, element: element)
+    commandSelection.publish([])
     debounce.process(.init(workflows: workflowSelection.selections))
   }
 
@@ -407,7 +414,7 @@ struct GroupDetailView: View {
 struct WorkflowsView_Previews: PreviewProvider {
   @FocusState static var focus: AppFocus?
   static var previews: some View {
-    GroupDetailView($focus, groupId: UUID().uuidString, workflowSelection: .init()) { _ in }
+    GroupDetailView($focus, groupId: UUID().uuidString, workflowSelection: .init(), commandSelection: .init()) { _ in }
       .designTime()
   }
 }
@@ -419,6 +426,7 @@ fileprivate extension CommandViewModel.Kind {
     case .builtIn: .builtIn
     case .bundled: .bundled
     case .open: .open
+    case .inputSource: .inputSource
     case .keyboard: .keyboard
     case .script: .script
     case .shortcut: .shortcut
@@ -428,6 +436,8 @@ fileprivate extension CommandViewModel.Kind {
     case .mouse: .mouse
     case .uiElement: .uiElement
     case .windowManagement: .windowManagement
+    case .windowFocus: .windowFocus
+    case .windowTiling: .windowTiling
     }
   }
 }

@@ -50,6 +50,7 @@ struct CommandViewModel: Codable, Hashable, Identifiable, Transferable {
       case .bundled(let bundledModel): bundledModel.placeholder
       case .open(let openModel): openModel.placeholder
       case .keyboard(let keyboardModel): keyboardModel.placeholder
+      case .inputSource(let inputSourceModel): inputSourceModel.placeholder
       case .script(let scriptModel): scriptModel.placeholder
       case .shortcut(let shortcutModel): shortcutModel.placeholder
       case .text(let textModel): textModel.placeholder
@@ -57,7 +58,9 @@ struct CommandViewModel: Codable, Hashable, Identifiable, Transferable {
       case .menuBar(let menuBarModel): menuBarModel.placeholder
       case .mouse(let mouseModel): mouseModel.placeholder
       case .uiElement(let uIElementCommand): uIElementCommand.placeholder
+      case .windowFocus(let command): command.placeholder
       case .windowManagement(let windowManagementModel): windowManagementModel.placeholder
+      case .windowTiling(let command): command.placeholder
       }
     }
 
@@ -66,6 +69,7 @@ struct CommandViewModel: Codable, Hashable, Identifiable, Transferable {
     case bundled(BundledModel)
     case open(OpenModel)
     case keyboard(KeyboardModel)
+    case inputSource(InputSourceModel)
     case script(ScriptModel)
     case shortcut(ShortcutModel)
     case text(TextModel)
@@ -73,7 +77,9 @@ struct CommandViewModel: Codable, Hashable, Identifiable, Transferable {
     case menuBar(MenuBarModel)
     case mouse(MouseModel)
     case uiElement(UIElementCommand)
+    case windowFocus(WindowFocusModel)
     case windowManagement(WindowManagementModel)
+    case windowTiling(WindowTilingModel)
 
     struct ApplicationModel: Codable, Hashable, Identifiable, Sendable {
       let id: String
@@ -144,11 +150,17 @@ struct CommandViewModel: Codable, Hashable, Identifiable, Transferable {
       var applications: [Application]
     }
 
+    struct InputSourceModel: Codable, Hashable, Identifiable, Sendable {
+      var id: String
+      var inputId: String
+      var name: String
+      var placeholder: String { "Change Input Source …" }
+    }
+
     struct KeyboardModel: Codable, Hashable, Identifiable, Sendable {
       let id: String
       var placeholder: String { "Invoke Keyboard Shortcut …" }
-      var iterations: Int
-      var keys: [KeyShortcut]
+      var command: KeyboardCommand.KeyCommand
     }
 
     struct MouseModel: Codable, Hashable, Identifiable, Sendable {
@@ -219,11 +231,24 @@ struct CommandViewModel: Codable, Hashable, Identifiable, Transferable {
       }
     }
 
+    struct WindowFocusModel: Codable, Hashable, Identifiable, Sendable {
+      let id: String
+      var placeholder: String { " Window Tiling…" }
+      var kind: WindowFocusCommand.Kind
+    }
+
     struct WindowManagementModel: Codable, Hashable, Identifiable, Sendable {
       let id: String
       var placeholder: String { "Control Window…" }
-      var kind: WindowCommand.Kind
+      var kind: WindowManagementCommand.Kind
       var animationDuration: Double
     }
+
+    struct WindowTilingModel: Codable, Hashable, Identifiable, Sendable {
+      let id: String
+      var placeholder: String { " Window Tiling…" }
+      var kind: WindowTiling
+    }
+
   }
 }

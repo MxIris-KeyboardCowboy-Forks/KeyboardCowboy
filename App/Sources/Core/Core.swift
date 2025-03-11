@@ -100,7 +100,7 @@ final class Core {
     workspace: .shared)
   lazy private(set) var uiElementCaptureStore = UIElementCaptureStore()
   lazy private(set) var recorderStore = KeyShortcutRecorderStore()
-  lazy private(set) var shortcutStore = ShortcutStore(scriptCommandRunner)
+  lazy private(set) var shortcutStore = ShortcutStore.shared
   lazy private(set) var commandLine = CommandLineCoordinator.shared
   lazy private(set) var applicationActivityMonitor = ApplicationActivityMonitor<UserSpace.Application>()
 //  lazy private(set) var applicationWindowObserver = ApplicationWindowObserver()
@@ -136,6 +136,9 @@ final class Core {
 
   lazy private(set) var applicationTriggerController = ApplicationTriggerController(workflowRunner)
   lazy private(set) var modifierTriggerController = ModifierTriggerController()
+
+  lazy private(set) var inputSourceStore: InputSourceStore = .init()
+  lazy private(set) var raycast = Raycast.Store()
 
   // MARK: - Controllers
 

@@ -141,7 +141,12 @@ private extension Command {
         )
       }
     case .keyboard(let keyboardCommand):
-      kind =  .keyboard(.init(id: keyboardCommand.id, iterations: keyboardCommand.iterations, keys: keyboardCommand.keyboardShortcuts))
+      switch keyboardCommand.kind {
+      case .key(let model):
+        kind = .keyboard(.init(id: keyboardCommand.id, command: model))
+      case .inputSource(let source):
+        kind = .inputSource(.init(id: source.id, inputId: source.id, name: source.name))
+      }
     case .menuBar(let menubarCommand):
       kind = .menuBar(.init(id: menubarCommand.id, application: menubarCommand.application, tokens: menubarCommand.tokens))
     case .mouse(let mouseCommand):
@@ -176,8 +181,12 @@ private extension Command {
       kind = .systemCommand(.init(id: systemCommand.id, kind: systemCommand.kind))
     case .uiElement(let uiElementCommand):
       kind = .uiElement(uiElementCommand)
+    case .windowFocus(let command):
+      kind = .windowFocus(.init(id: command.id, kind: command.kind))
     case .windowManagement(let windowCommand):
       kind = .windowManagement(.init(id: windowCommand.id, kind: windowCommand.kind, animationDuration: windowCommand.animationDuration))
+    case .windowTiling(let command):
+      kind = .windowTiling(.init(id: command.id, kind: command.kind))
     }
 
     return kind
@@ -240,6 +249,7 @@ extension Workflow.Trigger {
         )
     case .keyboardShortcuts(let trigger):
         .keyboardShortcuts(.init(allowRepeat: trigger.allowRepeat,
+                                 keepLastPartialMatch: trigger.keepLastPartialMatch,
                                  passthrough: trigger.passthrough,
                                  holdDuration: trigger.holdDuration,
                                  shortcuts: trigger.shortcuts))

@@ -79,14 +79,17 @@ struct KeyboardCowboyApp: App {
             core.groupCoordinator.handle(action)
             core.workflowCoordinator.handle(action)
             //            focus = .detail(.name)
-          },
-          onNewCommand: { id in
-            windowOpener.openNewCommandWindow(.newCommand(workflowId: id))
           }
         )
+        .environmentObject(core.configurationUpdater)
+        .environmentObject(WindowOpener(core: core))
+        .environmentObject(core.workflowCoordinator.updateTransaction)
+        .environmentObject(core.shortcutStore)
         .environmentObject(core.contentStore.groupStore)
         .environmentObject(core.workflowCoordinator.statePublisher)
         .environmentObject(core.workflowCoordinator.infoPublisher)
+        .environmentObject(core.raycast)
+        .environmentObject(core.inputSourceStore)
       }
 
       CommandGroup(replacing: .toolbar) {

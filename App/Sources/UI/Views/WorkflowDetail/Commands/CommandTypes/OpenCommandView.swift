@@ -19,33 +19,11 @@ struct OpenCommandView: View {
 
   var body: some View {
     CommandContainerView(metaData, placeholder: model.placeholder, icon: {
-      OpenCommandHeaderView(metaData, model: model, iconSize: iconSize)
+      HeaderView(metaData, model: model, iconSize: iconSize)
     }, content: {
-      OpenCommandContentView(metaData: metaData, model: $model)
+      ContentView(metaData: metaData, model: $model)
     }, subContent: {
-      Menu {
-        Button(action: {
-          updater.modifyCommand(withID: metaData.id, using: transaction) { command in
-            command.notification = .none
-          }
-        }, label: { Text("None") })
-        ForEach(Command.Notification.regularCases) { notification in
-          Button(action: {
-            updater.modifyCommand(withID: metaData.id, using: transaction) { command in
-              command.notification = notification
-            }
-          }, label: { Text(notification.displayValue) })
-        }
-      } label: {
-        switch metaData.notification {
-        case .bezel:        Text("Bezel").font(.caption)
-        case .capsule:      Text("Capsule").font(.caption)
-        case .commandPanel: Text("Command Panel").font(.caption)
-        case .none:         Text("None").font(.caption)
-        }
-      }
-      .fixedSize()
-      OpenCommandSubContentView(model: $model) {
+      SubContentView(model: $model) {
         NSWorkspace.shared.selectFile(model.path, inFileViewerRootedAtPath: "")
       }
     })
@@ -53,7 +31,7 @@ struct OpenCommandView: View {
   }
 }
 
-private struct OpenCommandHeaderView: View {
+private struct HeaderView: View {
   private var metaData: CommandViewModel.MetaData
   private let model: CommandViewModel.Kind.OpenModel
   private let iconSize: CGSize
@@ -68,12 +46,13 @@ private struct OpenCommandHeaderView: View {
     ZStack(alignment: .bottomTrailing) {
       switch metaData.icon {
       case .some(let icon):
-        IconView(icon: icon, size: iconSize)
         if let appPath = model.applicationPath {
           IconView(icon: .init(bundleIdentifier: appPath, path: appPath),
-                   size: iconSize.applying(.init(scaleX: 0.5, y: 0.5)))
+                   size: iconSize)
           .shadow(radius: 3)
           .id("open-with-\(appPath)")
+        } else {
+          IconView(icon: icon, size: iconSize)
         }
       case .none:
         EmptyView()
@@ -82,7 +61,7 @@ private struct OpenCommandHeaderView: View {
   }
 }
 
-private struct OpenCommandContentView: View {
+private struct ContentView: View {
   @ObserveInjection var inject
   @EnvironmentObject var updater: ConfigurationUpdater
   @EnvironmentObject var transaction: UpdateTransaction
@@ -150,7 +129,7 @@ private struct OpenCommandContentView: View {
   }
 }
 
-private struct OpenCommandSubContentView: View {
+private struct SubContentView: View {
   @Binding var model: CommandViewModel.Kind.OpenModel
   private let onReveal: () -> Void
 

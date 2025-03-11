@@ -33,6 +33,7 @@ final class MachPortCoordinator: @unchecked Sendable, ObservableObject, LeaderKe
   private var specialKeys: [Int] = [Int]()
   private var scheduledWorkItem: DispatchWorkItem?
   private var capsLockDown: Bool = false
+  private var clearOnFlagsChanged: Bool = false
 
   private let keyboardCleaner: KeyboardCleaner
   private let keyboardCommandRunner: KeyboardCommandRunner
@@ -124,6 +125,11 @@ final class MachPortCoordinator: @unchecked Sendable, ObservableObject, LeaderKe
     repeatingKeyCode = -1
     KeyViewer.instance.handleFlagsChanged(machPortEvent.flags)
 
+    if clearOnFlagsChanged && machPortEvent.flags == .maskNonCoalesced {
+      previousPartialMatch = PartialMatch.default()
+      clearOnFlagsChanged = false
+    }
+
     if allowsEscapeFallback && machPortEvent.keyCode == kVK_Escape && machPortEvent.result == nil {
       _ = try? machPort?.post(kVK_Escape, type: .flagsChanged, flags: .maskNonCoalesced)
     } else if machPortEvent.keyCode == kVK_Escape && machPortEvent.flags != .maskNonCoalesced {
@@ -188,7 +194,7 @@ final class MachPortCoordinator: @unchecked Sendable, ObservableObject, LeaderKe
     if handleRepeatingKeyEvent(machPortEvent) { return }
 
     let bundleIdentifier = UserSpace.shared.frontmostApplication.bundleIdentifier
-    let userModes = UserSpace.shared.userModes.filter(\.isEnabled)
+    let userModes = UserSpace.shared.currentUserModes.filter(\.isEnabled)
     let lookupToken: LookupToken
 
     // Check for use of the `Any Key`
@@ -259,8 +265,11 @@ final class MachPortCoordinator: @unchecked Sendable, ObservableObject, LeaderKe
           intercept(machPortEvent, tryGlobals: true, runningMacro: false)
           return
         }
+      } else if workflow.machPortConditions.keepLastPartialMatch {
+        clearOnFlagsChanged = true
       } else {
         previousPartialMatch = PartialMatch.default()
+        clearOnFlagsChanged = false
       }
 
       if inMacroContext {
@@ -313,10 +322,11 @@ final class MachPortCoordinator: @unchecked Sendable, ObservableObject, LeaderKe
 
     // Handle keyboard commands early to avoid cancelling previous keyboard invocations.
     if workflow.machPortConditions.enabledCommandsCount == 1,
-       case .keyboard(let command) = workflow.machPortConditions.enabledCommands.first {
+       case .keyboard(let keyboardCommand) = workflow.machPortConditions.enabledCommands.first,
+       case .key(let command) = keyboardCommand.kind {
 
       if !machPortEvent.isRepeat {
-        notifications.notifyKeyboardCommand(workflow, command: command)
+        notifications.notifyKeyboardCommand(workflow, command: keyboardCommand)
       }
 
       execution = { [weak self, keyboardCommandRunner] machPortEvent, _ in

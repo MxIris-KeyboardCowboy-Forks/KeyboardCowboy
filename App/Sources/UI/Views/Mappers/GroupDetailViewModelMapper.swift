@@ -54,7 +54,7 @@ private extension Workflow {
     case .application: .application("foo")
     case .keyboardShortcuts(let trigger): .keyboard(trigger.shortcuts.binding ?? "")
     case .snippet(let snippetTrigger): .snippet(snippetTrigger.text)
-    case .modifier(let modifier): .none
+    case .modifier: .none
     case .none: nil
     }
 
@@ -144,12 +144,20 @@ private extension Array where Element == Command {
       case .mouse:
         images.append(.mouse(element, offset: convertedOffset))
       case .keyboard(let keyCommand):
-        if let keyboardShortcut = keyCommand.keyboardShortcuts.first {
-          images.append(.keyboard(element, string: keyboardShortcut.key, offset: convertedOffset))
+        switch keyCommand.kind {
+        case .key(let keyCommand):
+          if let keyboardShortcut = keyCommand.keyboardShortcuts.first {
+            images.append(.keyboard(element, string: keyboardShortcut.key, offset: convertedOffset))
+          }
+        case .inputSource:
+          images.append(.inputSource(element, offset: convertedOffset))
         }
+
       case .open(let command):
         let path: String
-        if command.isUrl {
+        if let appPath = command.application?.path {
+          path = appPath
+        } else if command.isUrl {
           path = "/System/Library/SyncServices/Schemas/Bookmarks.syncschema/Contents/Resources/com.apple.Bookmarks.icns"
         } else {
           path = command.path
@@ -169,7 +177,9 @@ private extension Array where Element == Command {
         }
       case .systemCommand(let command): images.append(.systemCommand(element, kind: command.kind, offset: convertedOffset))
       case .uiElement:                  images.append(.uiElement(element, offset: convertedOffset))
+      case .windowFocus(let command):   images.append(.windowFocus(element, kind: command.kind, offset: convertedOffset))
       case .windowManagement:           images.append(.windowManagement(element, offset: convertedOffset))
+      case .windowTiling(let command):  images.append(.windowTiling(element, kind: command.kind, offset: convertedOffset))
       }
       offset += 1
     }

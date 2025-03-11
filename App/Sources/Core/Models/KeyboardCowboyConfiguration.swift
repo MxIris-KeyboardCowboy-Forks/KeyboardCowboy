@@ -68,6 +68,7 @@ struct KeyboardCowboyConfiguration: Identifiable, Codable, Hashable, Sendable {
           .application(
             .init(application: .init(bundleIdentifier: "com.apple.TextEdit",
                                      bundleName: "TextEdit",
+                                     displayName: "TextEdit",
                                      path: "/System/Applications/TextEdit.app"))
           )
         ]
@@ -98,6 +99,7 @@ struct KeyboardCowboyConfiguration: Identifiable, Codable, Hashable, Sendable {
                 .init(application: .init(
                   bundleIdentifier: "com.apple.Terminal",
                   bundleName: "Terminal",
+                  displayName: "Terminal",
                   path: "/System/Applications/Utilities/Terminal.app"))
               )
             ]
@@ -126,7 +128,7 @@ struct KeyboardCowboyConfiguration: Identifiable, Codable, Hashable, Sendable {
                      workflows: [
                       Workflow(name: "Open a specific note",
                                commands: [
-                                .script(.init(name: "Show note", kind: .appleScript, source: .inline("""
+                                .script(.init(name: "Show note", kind: .appleScript(variant: .regular), source: .inline("""
                                   tell application "Notes"
                                       show note "awesome note"
                                   end tell
@@ -158,22 +160,22 @@ struct KeyboardCowboyConfiguration: Identifiable, Codable, Hashable, Sendable {
                         Workflow(name: "Vim bindings H to ←",
                                  trigger: .keyboardShortcuts(.init(shortcuts: [.init(key: "H", modifiers: [.leftOption])])),
                                  isEnabled: false, commands: [
-                                  .keyboard(.init(name: "", isEnabled: true, keyboardShortcut: .init(key: "←")))
+                                  .keyboard(.init(name: "", kind: .key(command: .init(keyboardShortcuts: [.init(key: "←")], iterations: 1))))
                                  ]),
                         Workflow(name: "Vim bindings J to ↓",
                                  trigger: .keyboardShortcuts(.init(shortcuts: [.init(key: "J", modifiers: [.leftOption])])),
                                  isEnabled: false, commands: [
-                                  .keyboard(.init(name: "", isEnabled: true, keyboardShortcut: .init(key: "↓")))
+                                  .keyboard(.init(name: "", kind: .key(command: .init(keyboardShortcuts: [.init(key: "↓")], iterations: 1))))
                                  ]),
                         Workflow(name: "Vim bindings K to ↑",
                                  trigger: .keyboardShortcuts(.init(shortcuts: [.init(key: "K", modifiers: [.leftOption])])),
                                  isEnabled: false, commands: [
-                                  .keyboard(.init(name: "", isEnabled: true, keyboardShortcut: .init(key: "↑")))
+                                  .keyboard(.init(name: "", kind: .key(command: .init(keyboardShortcuts: [.init(key: "↑")], iterations: 1))))
                                  ]),
                         Workflow(name: "Vim bindings L to →",
                                  trigger: .keyboardShortcuts(.init(shortcuts: [.init(key: "L", modifiers: [.leftOption])])),
                                  isEnabled: false, commands: [
-                                  .keyboard(.init(name: "", isEnabled: true, keyboardShortcut: .init(key: "→")))
+                                  .keyboard(.init(name: "", kind: .key(command: .init(keyboardShortcuts: [.init(key: "→")], iterations: 1))))
                                  ])
                       ]),
         WorkflowGroup(symbol: "flowchart", name: "Shortcuts", color: "#B263EA"),

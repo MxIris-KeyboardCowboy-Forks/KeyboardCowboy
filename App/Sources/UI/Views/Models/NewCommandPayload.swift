@@ -13,12 +13,15 @@ enum NewCommandPayload: Equatable {
   case open(path: String, application: Application?)
   case shortcut(name: String)
   case keyboardShortcut([KeyShortcut])
+  case inputSource(id: String, name: String)
   case text(TextCommand)
   case systemCommand(kind: SystemCommand.Kind)
   case menuBar(tokens: [MenuBarCommand.Token], application: Application?)
   case mouse(kind: MouseCommand.Kind)
   case uiElement(predicates: [UIElementCommand.Predicate])
-  case windowManagement(kind: WindowCommand.Kind)
+  case windowFocus(kind: WindowFocusCommand.Kind)
+  case windowManagement(kind: WindowManagementCommand.Kind)
+  case windowTiling(kind: WindowTiling)
 
   var title: String {
     switch self {
@@ -67,6 +70,7 @@ enum NewCommandPayload: Equatable {
         keyboardShortcutString.append(keyboardShortcut.stringValue)
       }
       return keyboardShortcutString
+    case .inputSource:      return "Input Source"
     case .text:             return "Text editing"
     case .systemCommand:    return "System Command"
     case .menuBar:          return "MenuBar Command"
@@ -74,6 +78,8 @@ enum NewCommandPayload: Equatable {
     case .mouse:            return "Mouse Command"
     case .uiElement:        return "UI Element Command"
     case .bundled:          return "Bundled Command"
+    case .windowFocus:      return "Window Focus Command"
+    case .windowTiling:     return "Window Tiling Command"
     }
   }
 }

@@ -58,6 +58,7 @@ struct GroupDetailViewModel: Identifiable, Hashable, Codable, Sendable, Transfer
       case builtIn(BuiltInCommand.Kind)
       case bundled(Bundled)
       case open
+      case inputSource
       case keyboard(String)
       case script(ScriptCommand.Source)
       case plain
@@ -67,7 +68,9 @@ struct GroupDetailViewModel: Identifiable, Hashable, Codable, Sendable, Transfer
       case menuBar
       case mouse
       case uiElement
+      case windowFocus(WindowFocusCommand.Kind)
       case windowManagement
+      case windowTiling(WindowTiling)
       case icon(Icon)
 
       var searchTerm: String {
@@ -77,6 +80,7 @@ struct GroupDetailViewModel: Identifiable, Hashable, Codable, Sendable, Transfer
         case .bundled: "bundled"
         case .open: "open"
         case .keyboard: "keyboard"
+        case .inputSource: "inputSource"
         case .script: "script"
         case .plain: "plain"
         case .shortcut: "shortcut"
@@ -85,7 +89,9 @@ struct GroupDetailViewModel: Identifiable, Hashable, Codable, Sendable, Transfer
         case .menuBar: "menuBar"
         case .mouse: "mouse"
         case .uiElement: "uiElement"
+        case .windowFocus: "windowFocus"
         case .windowManagement: "windowManagement"
+        case .windowTiling: "windowTiling"
         case .icon: "icon"
         }
       }
@@ -96,6 +102,7 @@ struct GroupDetailViewModel: Identifiable, Hashable, Codable, Sendable, Transfer
         case .builtIn: .builtIn
         case .bundled: .bundled
         case .open: .open
+        case .inputSource: .inputSource
         case .keyboard: .keyboard
         case .script: .script
         case .plain: .plain
@@ -105,7 +112,9 @@ struct GroupDetailViewModel: Identifiable, Hashable, Codable, Sendable, Transfer
         case .menuBar: .menuBar
         case .mouse: .mouse
         case .uiElement: .uiElement
+        case .windowFocus: .windowFocus
         case .windowManagement: .windowManagement
+        case .windowTiling: .windowTiling
         case .icon: .application
         }
       }
@@ -125,6 +134,7 @@ struct GroupDetailViewModel: Identifiable, Hashable, Codable, Sendable, Transfer
     static func builtIn(_ command: Command, kind: BuiltInCommand.Kind, offset: Double) -> Self { .init(id: command.id, offset: offset, kind: .builtIn(kind)) }
     static func bundled(_ command: Command, offset: Double, kind: Bundled) -> Self { .init(id: command.id, offset: offset, kind: .bundled(kind)) }
     static func keyboard(_ command: Command, string: String, offset: Double) -> Self { .init(id: command.id, offset: offset, kind: .keyboard(string)) }
+    static func inputSource(_ command: Command, offset: Double) -> Self { .init(id: command.id, offset: offset, kind: .inputSource) }
     static func mouse(_ command: Command, offset: Double) -> Self { .init(id: command.id, offset: offset, kind: .mouse) }
     static func menubar(_ command: Command, offset: Double) -> Self { .init(id: command.id, offset: offset, kind: .menuBar) }
     static func script(_ command: Command, source: ScriptCommand.Source, offset: Double) -> Self { .init(id: command.id, offset: offset, kind: .script(source)) }
@@ -132,6 +142,8 @@ struct GroupDetailViewModel: Identifiable, Hashable, Codable, Sendable, Transfer
     static func systemCommand(_ command: Command, kind: SystemCommand.Kind, offset: Double) -> Self { .init(id: command.id, offset: offset, kind: .systemCommand(kind)) }
     static func text(_ command: Command, kind: Text, offset: Double) -> Self { .init(id: command.id, offset: offset, kind: .text(kind)) }
     static func uiElement(_ command: Command, offset: Double) -> Self { .init(id: command.id, offset: offset, kind: .uiElement) }
+    static func windowFocus(_ command: Command, kind: WindowFocusCommand.Kind, offset: Double) -> Self { .init(id: command.id, offset: offset, kind: .windowFocus(kind)) }
     static func windowManagement(_ command: Command, offset: Double) -> Self { .init(id: command.id, offset: offset, kind: .windowManagement) }
+    static func windowTiling(_ command: Command, kind: WindowTiling, offset: Double) -> Self { .init(id: command.id, offset: offset, kind: .windowTiling(kind)) }
   }
 }

@@ -23,30 +23,7 @@ struct BuiltInCommandView: View {
       icon: { BuiltinIconBuilder.icon(model.kind, size: iconSize.width) },
       content: {
         BuiltInCommandContentView(model, metaData: metaData)
-      }, subContent: {
-        Menu {
-          Button(action: {
-            updater.modifyCommand(withID: metaData.id, using: transaction) { command in
-              command.notification = .none
-            }
-          }, label: { Text("None") })
-          ForEach(Command.Notification.regularCases) { notification in
-            Button(action: {
-              updater.modifyCommand(withID: metaData.id, using: transaction) { command in
-                command.notification = notification
-              }
-            }, label: { Text(notification.displayValue) })
-          }
-        } label: {
-          switch metaData.notification {
-          case .bezel:        Text("Bezel").font(.caption)
-          case .capsule:      Text("Capsule").font(.caption)
-          case .commandPanel: Text("Command Panel").font(.caption)
-          case .none:         Text("None").font(.caption)
-          }
-        }
-        .fixedSize()
-    })
+      }, subContent: { })
     .enableInjection()
   }
 }
@@ -68,7 +45,7 @@ private struct BuiltInCommandContentView: View {
     HStack {
       Menu(content: {
         Button(action: {
-          let newKind: BuiltInCommand.Kind = .commandLine(.argument(contents: ""))
+          let newKind: BuiltInCommand.Kind = .commandLine(action: .argument(contents: ""))
           performUpdate(newKind)
           model.name = newKind.displayValue
           model.kind = newKind
@@ -80,7 +57,7 @@ private struct BuiltInCommandContentView: View {
         })
 
         Button(action: {
-          let newKind: BuiltInCommand.Kind = .macro(.record)
+          let newKind: BuiltInCommand.Kind = .macro(action: .record)
           performUpdate(newKind)
           model.name = newKind.displayValue
           model.kind = newKind
@@ -92,7 +69,7 @@ private struct BuiltInCommandContentView: View {
         })
 
         Button(action: {
-          let newKind: BuiltInCommand.Kind = .macro(.remove)
+          let newKind: BuiltInCommand.Kind = .macro(action: .remove)
           performUpdate(newKind)
           model.name = newKind.displayValue
           model.kind = newKind
@@ -105,7 +82,7 @@ private struct BuiltInCommandContentView: View {
 
         Button(
           action: {
-            let newKind: BuiltInCommand.Kind = .userMode(.init(id: model.kind.userModeId, name: model.name, isEnabled: metaData.isEnabled), .toggle)
+            let newKind: BuiltInCommand.Kind = .userMode(mode: .init(id: model.kind.userModeId, name: model.name, isEnabled: metaData.isEnabled), action: .toggle)
             performUpdate(newKind)
             model.name = newKind.displayValue
             model.kind = newKind
@@ -118,7 +95,7 @@ private struct BuiltInCommandContentView: View {
           })
         Button(
           action: {
-            let newKind: BuiltInCommand.Kind = .userMode(.init(id: model.kind.userModeId, name: model.name, isEnabled: metaData.isEnabled), .enable)
+            let newKind: BuiltInCommand.Kind = .userMode(mode: .init(id: model.kind.userModeId, name: model.name, isEnabled: metaData.isEnabled), action: .enable)
             performUpdate(newKind)
             model.name = newKind.displayValue
             model.kind = newKind
@@ -131,7 +108,7 @@ private struct BuiltInCommandContentView: View {
           })
         Button(
           action: {
-            let newKind: BuiltInCommand.Kind = .userMode(.init(id: model.kind.userModeId, name: model.name, isEnabled: metaData.isEnabled), .disable)
+            let newKind: BuiltInCommand.Kind = .userMode(mode: .init(id: model.kind.userModeId, name: model.name, isEnabled: metaData.isEnabled), action: .disable)
             performUpdate(newKind)
             model.name = newKind.displayValue
             model.kind = newKind
@@ -161,7 +138,7 @@ private struct BuiltInCommandContentView: View {
               let action: BuiltInCommand.Kind.Action
               if case .userMode(_, let resolvedAction) = model.kind {
                 action = resolvedAction
-                model.kind = .userMode(userMode, action)
+                model.kind = .userMode(mode: userMode, action: action)
                 performUpdate(model.kind)
               }
             }, label: { Text(userMode.name).font(.subheadline) })

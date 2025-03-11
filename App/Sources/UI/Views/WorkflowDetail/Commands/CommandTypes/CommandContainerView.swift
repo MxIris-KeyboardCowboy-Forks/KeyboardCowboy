@@ -27,22 +27,22 @@ struct CommandContainerView<IconContent, Content, SubContent>: View where IconCo
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
-      CommandContainerHeaderView($metaData, placeholder: placeholder)
+      HeaderView($metaData, placeholder: placeholder)
         .switchStyle {
           $0.style = .small
         }
 
       ZenDivider()
 
-      CommandContainerContentView($metaData, icon: icon, content: content)
+      ContentView(icon: icon, content: content)
 
-      CommandContainerSubContentView($metaData, content: subContent)
+      SubView($metaData, content: subContent)
         .textStyle {
           $0.font = .caption
         }
         .menuStyle {
           $0.calm = false
-          $0.padding = .small
+          $0.padding = .medium
         }
     }
     .roundedStyle()
@@ -50,7 +50,7 @@ struct CommandContainerView<IconContent, Content, SubContent>: View where IconCo
   }
 }
 
-private struct CommandContainerHeaderView: View {
+private struct HeaderView: View {
   @ObserveInjection var inject
   @EnvironmentObject var updater: ConfigurationUpdater
   @EnvironmentObject var transaction: UpdateTransaction
@@ -69,6 +69,7 @@ private struct CommandContainerHeaderView: View {
         .onChange(of: metaData.isEnabled) { newValue in
           updater.modifyCommand(withID: metaData.id, using: transaction, handler: { $0.isEnabled = newValue })
         }
+        .padding(.leading, 3)
 
       let textFieldPlaceholder = metaData.namePlaceholder.isEmpty
       ? placeholder
@@ -88,26 +89,25 @@ private struct CommandContainerHeaderView: View {
   }
 }
 
-private struct CommandContainerContentView<IconContent, Content>: View where IconContent: View,
-                                                                             Content: View {
+private struct ContentView<IconContent, Content>: View where IconContent: View, Content: View {
   @ViewBuilder private let icon: () -> IconContent
   @ViewBuilder private let content: () -> Content
-  @Binding private var metaData: CommandViewModel.MetaData
 
-  init(_ metaData: Binding<CommandViewModel.MetaData>,
-       icon: @escaping () -> IconContent,
+  init(icon: @escaping () -> IconContent,
        content: @escaping () -> Content) {
     self.icon = icon
     self.content = content
-    _metaData = metaData
   }
 
   var body: some View {
     HStack(alignment: .top, spacing: 6) {
-      RoundedRectangle(cornerRadius: 5)
+      RoundedRectangle(cornerRadius: 6)
         .fill(Color.black.opacity(0.2))
-        .frame(width: 28, height: 28)
+        .frame(width: 34, height: 34)
         .overlay { icon() }
+        .fixedSize()
+        .padding(1)
+
       content()
         .menuStyle { menu in
           menu.calm = false
@@ -119,7 +119,7 @@ private struct CommandContainerContentView<IconContent, Content>: View where Ico
   }
 }
 
-private struct CommandContainerSubContentView<Content>: View where Content: View {
+private struct SubView<Content>: View where Content: View {
   @EnvironmentObject var updater: ConfigurationUpdater
   @EnvironmentObject var transaction: UpdateTransaction
   @Binding var metaData: CommandViewModel.MetaData
@@ -143,6 +143,33 @@ private struct CommandContainerSubContentView<Content>: View where Content: View
           }
         }
       )
+      Menu {
+        Button(action: {
+          updater.modifyCommand(withID: metaData.id, using: transaction) { command in
+            metaData.notification = .none
+            command.notification = .none
+          }
+        }, label: { Text("None") })
+        ForEach(Command.Notification.allCases) { notification in
+          Button(action: {
+            metaData.notification = notification
+            updater.modifyCommand(withID: metaData.id, using: transaction) { command in
+              command.notification = notification
+            }
+          }, label: { Text(notification.displayValue) })
+        }
+      } label: {
+        HStack {
+          Image(systemName: "app.badge")
+          switch metaData.notification {
+          case .bezel:        Text("Bezel").font(.caption)
+          case .capsule:      Text("Capsule").font(.caption)
+          case .commandPanel: Text("Command Panel").font(.caption)
+          case .none:         Text("None").font(.caption)
+          }
+        }
+      }
+      .fixedSize()
       content()
     }
     .lineLimit(1)
