@@ -28,9 +28,7 @@ struct CommandContainerView<IconContent, Content, SubContent>: View where IconCo
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       HeaderView($metaData, placeholder: placeholder)
-        .switchStyle {
-          $0.style = .small
-        }
+        .environment(\.switchStyle, .small)
 
       ZenDivider()
 
@@ -38,12 +36,11 @@ struct CommandContainerView<IconContent, Content, SubContent>: View where IconCo
 
       SubView($metaData, content: subContent)
         .textStyle {
-          $0.font = .caption
+          $0.font = .caption2
         }
-        .menuStyle {
-          $0.calm = false
-          $0.padding = .medium
-        }
+        .environment(\.menuCalm, true)
+        .environment(\.menuPadding, .small)
+        .environment(\.menuUnfocusedOpacity, 0.5)
     }
     .roundedStyle()
     .enableInjection()
@@ -70,15 +67,16 @@ private struct HeaderView: View {
           updater.modifyCommand(withID: metaData.id, using: transaction, handler: { $0.isEnabled = newValue })
         }
         .padding(.leading, 3)
+        .switchStyle(.small)
 
       let textFieldPlaceholder = metaData.namePlaceholder.isEmpty
       ? placeholder
       : metaData.namePlaceholder
+
       TextField(textFieldPlaceholder, text: $metaData.name)
-        .textFieldStyle { textField in
-          textField.font = .headline
-          textField.unfocusedOpacity = 0
-        }
+        .textFieldStyle()
+        .environment(\.textFieldFont, .headline)
+        .environment(\.textFieldUnfocusedOpacity, 0)
         .onChange(of: metaData.name, perform: { newValue in
           updater.modifyCommand(withID: metaData.id, using: transaction, handler: { $0.name = newValue })
         })
@@ -109,9 +107,7 @@ private struct ContentView<IconContent, Content>: View where IconContent: View, 
         .padding(1)
 
       content()
-        .menuStyle { menu in
-          menu.calm = false
-        }
+        .environment(\.menuCalm, false)
         .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
         .style(.subItem)
         .roundedSubStyle(padding: 1)
@@ -120,6 +116,7 @@ private struct ContentView<IconContent, Content>: View where IconContent: View, 
 }
 
 private struct SubView<Content>: View where Content: View {
+  @ObserveInjection var inject
   @EnvironmentObject var updater: ConfigurationUpdater
   @EnvironmentObject var transaction: UpdateTransaction
   @Binding var metaData: CommandViewModel.MetaData
@@ -150,13 +147,16 @@ private struct SubView<Content>: View where Content: View {
             command.notification = .none
           }
         }, label: { Text("None") })
+
         ForEach(Command.Notification.allCases) { notification in
           Button(action: {
             metaData.notification = notification
             updater.modifyCommand(withID: metaData.id, using: transaction) { command in
               command.notification = notification
             }
-          }, label: { Text(notification.displayValue) })
+          }, label: {
+            Text(notification.displayValue)
+          })
         }
       } label: {
         HStack {
@@ -175,6 +175,7 @@ private struct SubView<Content>: View where Content: View {
     .lineLimit(1)
     .allowsTightening(true)
     .truncationMode(.tail)
+    .enableInjection()
   }
 }
 
@@ -200,11 +201,9 @@ private struct CommandContainerActionView: View {
         .aspectRatio(contentMode: .fit)
         .frame(width: 8, height: 10)
     })
-    .buttonStyle({ style in
-      style.calm = true
-      style.backgroundColor = .systemRed
-      style.padding = .medium
-    })
+    .environment(\.buttonCalm, true)
+    .environment(\.buttonBackgroundColor, .systemRed)
+    .environment(\.buttonPadding, .medium)
     .help("Delete Command")
     .enableInjection()
   }

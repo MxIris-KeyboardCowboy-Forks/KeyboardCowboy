@@ -136,10 +136,8 @@ private struct ApplicationCommandInternalView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
       }
-      .checkboxStyle { style in
-        style.font = .caption
-        style.style = .small
-      }
+      .environment(\.toggleFont, .caption)
+      .environment(\.toggleStyle, .small)
     }
     .lineLimit(1)
     .allowsTightening(true)
@@ -197,7 +195,6 @@ struct ApplicationCommandImageView: View {
       Divider()
 
       ForEach(applicationStore.applications.lazy, id: \.path) { app in
-
         Button(action: {
           updater.modifyCommand(withID: metaData.id, using: transaction) { command in
             guard case .application(var applicationCommand) = command else { return }

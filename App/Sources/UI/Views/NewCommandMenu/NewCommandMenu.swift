@@ -112,7 +112,7 @@ fileprivate struct ApplicationMenuView: View {
       MenuLabel("Applications")
       ForEach(store.applications, id: \.path) { application in
         Button(action: { performUpdate(.open, application: application) },
-               label: { Text(application.bundleName) })
+               label: { ApplicationLabel(application) })
       }
     } label: {
       Image(systemName: "app")
@@ -126,6 +126,21 @@ fileprivate struct ApplicationMenuView: View {
         .application(.init(action: action, application: application, meta: Command.MetaData(), modifiers: []))
       )
     }
+  }
+}
+
+fileprivate struct ApplicationLabel: View {
+  private let application: Application
+
+  init(_ application: Application) {
+    self.application = application
+  }
+
+  var body: some View {
+    VStack {
+      Text(application.bundleName)
+    }
+    .truncationMode(.middle)
   }
 }
 
@@ -536,9 +551,7 @@ fileprivate struct URLPrompt: View {
         .keyboardShortcut(.defaultAction)
       }
     }
-    .buttonStyle { button in
-      button.font = .caption
-    }
+    .environment(\.buttonFont, .caption)
     .onAppear {
       focus = true
     }
@@ -878,11 +891,9 @@ fileprivate class PasteboardURLPublisher: ObservableObject, Sendable {
       .frame(width: 12, height: 16)
       .layoutPriority(-1)
   }
-    .buttonStyle { button in
-      button.padding = .medium
-      button.font = .body
-      button.backgroundColor = .systemGreen
-    }
-    .padding()
-    .designTime()
+  .environment(\.menuPadding, .medium)
+  .environment(\.menuFont, .body)
+  .environment(\.menuBackgroundColor, .systemGreen)
+  .padding()
+  .designTime()
 }
